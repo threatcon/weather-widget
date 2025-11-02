@@ -332,40 +332,66 @@ async function renderUI(data, locationLabel) {
       }
 
       // forecast cards: rebuild only when needed (simple approach: clear and re-add)
-      const fc = EL.forecastContainer;
-      if (fc) {
-        // build minimal DOM changes: only rebuild when time series length changed or first render
-        const needRebuild = !fc._built || (data.daily?.time?.length !== fc._builtCount);
-        if (needRebuild) {
-          fc._built = true;
-          fc._builtCount = data.daily?.time?.length || 0;
-          while (fc.firstChild) fc.removeChild(fc.firstChild);
-          if (data.daily?.time) {
-            const days = data.daily.time;
-            const max = Math.min(days.length, 4);
-            for (let i = 0; i < max; i++) {
-              const dIso = data.daily.time[i];
-              const d = new Date(dIso);
-              const label = i === 0 ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short' });
-              const hi = Math.round(data.daily.temperature_2m_max[i]);
-              const lo = Math.round(data.daily.temperature_2m_min[i]);
-              const codeDay = data.daily.weathercode[i];
-              const card = document.createElement('div');
-              card.className = 'forecast-day bg-white/5 backdrop-blur-sm rounded-xl p-3 w-20 text-center border border-white/10 shadow-sm hover:bg-white/10 transition-all duration-200 cursor-pointer transform hover:-translate-y-1';
-              card.innerHTML = `<div class="day-name text-xs font-medium mb-1 opacity-80">${label}</div>
-                                <div class="forecast-icon text-2xl my-1 drop-shadow-md">${weatherCodeToIcon(codeDay,true)}</div>
-                                <div class="high-temp text-sm font-semibold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300">${hi}°</div>
-                                <div class="low-temp text-xs opacity-70">${lo}°</div>`;
-              card.addEventListener('click', () => {
-                setTextIfChanged(EL.temperature, `${hi}°F`);
-                setTextIfChanged(EL.weatherIcon, weatherCodeToIcon(codeDay, true));
-                card.classList.add('scale-105');
-                setTimeout(() => card.classList.remove('scale-105'), 220);
-              });
-              fc.appendChild(card);
-            }
-          }
-        }
+// ---------- replace existing forecast-building code with this ----------
+const fc = EL.forecastContainer;
+if (fc) {
+  // compute local YYYY-MM-DD for "today" (use local calendar date)
+  const pad = n => String(n).padStart(2, '0');
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+  const dailyTimes = data.daily?.time || [];
+  // find index where daily time equals local today; fallback to 0
+  let startIdx = dailyTimes.findIndex(d => d === todayStr);
+  if (startIdx === -1) {
+    // sometimes API returns only future days or different alignment; try a safer match:
+    // if first element equals today-1 and second equals today, pick 1
+    if (dailyTimes.length > 1) {
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      const yStr = `${yesterday.getFullYear()}-${pad(yesterday.getMonth() + 1)}-${pad(yesterday.getDate())}`;
+      if (dailyTimes[0] === yStr && dailyTimes[1] === todayStr) startIdx = 1;
+      else startIdx = 0;
+    } else {
+      startIdx = 0;
+    }
+  }
+
+  // rebuild only when needed
+  const needRebuild = !fc._built || (data.daily?.time?.length !== fc._builtCount) || fc._startIdx !== startIdx;
+  if (needRebuild) {
+    fc._built = true;
+    fc._builtCount = data.daily?.time?.length || 0;
+    fc._startIdx = startIdx;
+    while (fc.firstChild) fc.removeChild(fc.firstChild);
+
+    const maxCards = 4;
+    for (let i = 0; i < maxCards; i++) {
+      const idx = startIdx + i;
+      if (!data.daily || idx >= (data.daily.time || []).length) break;
+      const dIso = data.daily.time[idx];
+      const d = new Date(dIso + 'T00:00:00'); // safe parse
+      const label = (idx === startIdx) ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short' });
+      const hi = Math.round(data.daily.temperature_2m_max[idx]);
+      const lo = Math.round(data.daily.temperature_2m_min[idx]);
+      const codeDay = data.daily.weathercode[idx];
+
+      const card = document.createElement('div');
+      card.className = 'forecast-day bg-white/5 backdrop-blur-sm rounded-xl p-3 w-20 text-center border border-white/10 shadow-sm hover:bg-white/10 transition-all duration-200 cursor-pointer transform hover:-translate-y-1';
+      card.innerHTML = `<div class="day-name text-xs font-medium mb-1 opacity-80">${label}</div>
+                        <div class="forecast-icon text-2xl my-1 drop-shadow-md">${weatherCodeToIcon(codeDay,true)}</div>
+                        <div class="high-temp text-sm font-semibold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300">${hi}°</div>
+                        <div class="low-temp text-xs opacity-70">${lo}°</div>`;
+      card.addEventListener('click', () => {
+        setTextIfChanged(EL.temperature, `${hi}°F`);
+        setTextIfChanged(EL.weatherIcon, weatherCodeToIcon(codeDay, true));
+        card.classList.add('scale-105');
+        setTimeout(() => card.classList.remove('scale-105'), 220);
+      });
+      fc.appendChild(card);
+    }
+  }
+}
       }
     });
   } catch (err) {
