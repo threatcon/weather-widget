@@ -62,21 +62,24 @@ updateDateTime();
 setInterval(updateDateTime, 60_000);
 
 /* ---------- location detection ---------- */
+/* ---------- robust location detection (replace existing) ---------- */
 const IP_PROVIDERS = [
-  { url: 'https://ipapi.co/json/', mapper: j => j && j.latitude && j.longitude ? { lat: Number(j.latitude), lon: Number(j.longitude), label: [j.city, j.region, j.country_name].filter(Boolean).join(', ') } : null },
-  { url: 'https://ipwho.is/', mapper: j => j && j.success !== false && j.latitude && j.longitude ? { lat: Number(j.latitude), lon: Number(j.longitude), label: [j.city, j.region, j.country].filter(Boolean).join(', ') } : null },
-  // fallback provider (freegeoip-like)
-  { url: 'https://ipinfo.io/json?token=public', mapper: j => j && j.loc ? (() => { const [lat,lon] = j.loc.split(','); return { lat: Number(lat), lon: Number(lon), label: j.city ? `${j.city}, ${j.region || ''} ${j.country || ''}`.trim() : null }; })() : null }
+  { url: 'https://freegeoip.app/json/', mapper: j => j && j.latitude && j.longitude ? { lat: Number(j.latitude), lon: Number(j.longitude), label: [j.city, j.region_name || j.region, j.country_name].filter(Boolean).join(', ') } : null },
+  { url: 'https://ipapi.co/json/', mapper: j => j && (j.latitude || j.lat) && (j.longitude || j.lon) ? { lat: Number(j.latitude || j.lat), lon: Number(j.longitude || j.lon), label: [j.city, j.region, j.country_name].filter(Boolean).join(', ') } : null },
+  { url: 'https://ipwho.is/', mapper: j => j && j.success !== false && j.latitude && j.longitude ? { lat: Number(j.latitude), lon: Number(j.longitude), label: [j.city, j.region, j.country].filter(Boolean).join(', ') } : null }
 ];
 
 async function tryIpProviders() {
   for (const p of IP_PROVIDERS) {
     try {
+      console.log('trying IP provider', p.url);
       const json = await fetchWithRetries(p.url, {}, 2, 300);
       const mapped = p.mapper(json);
       if (mapped) {
         console.log('IP provider succeeded', p.url, mapped);
         return mapped;
+      } else {
+        console.warn('IP provider returned no mapping', p.url, json);
       }
     } catch (e) {
       console.warn('IP provider failed', p.url, e);
@@ -85,26 +88,28 @@ async function tryIpProviders() {
   return null;
 }
 
-function tryNavigatorGeolocation(timeoutMs = 6000) {
+function tryNavigatorGeolocation(timeoutMs = 7000) {
   return new Promise((resolve) => {
-    if (!navigator.geolocation) return resolve(null);
+    if (!('geolocation' in navigator)) return resolve(null);
     let done = false;
     const onSuccess = (pos) => { if (done) return; done = true; resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, label: null }); };
-    const onErr = () => { if (done) return; done = true; resolve(null); };
-    const id = navigator.geolocation.getCurrentPosition(onSuccess, onErr, { timeout: timeoutMs, maximumAge: 60000 });
-    // fallback safety
-    setTimeout(() => { if (!done) { done = true; resolve(null); } }, timeoutMs + 200);
+    const onErr = (err) => { if (done) return; done = true; console.warn('navigator.geolocation error', err); resolve(null); };
+    navigator.geolocation.getCurrentPosition(onSuccess, onErr, { timeout: timeoutMs, maximumAge: 60000 });
+    setTimeout(() => { if (!done) { done = true; resolve(null); } }, timeoutMs + 300);
   });
 }
 
 async function detectLocation() {
-  // 1) try IP services
-  const ip = await tryIpProviders().catch(() => null);
+  // 1) fast IP provider attempts (CORS-friendly)
+  const ip = await tryIpProviders().catch(err => { console.warn('tryIpProviders threw', err); return null; });
   if (ip) return ip;
-  // 2) try browser geolocation (asks user; may be blocked)
+
+  // 2) try navigator geolocation (may prompt the user)
   const geo = await tryNavigatorGeolocation().catch(() => null);
   if (geo) return geo;
-  // 3) fallback default
+
+  // 3) final fallback default
+  console.warn('All location methods failed; falling back to defaults');
   return { lat: 40.7128, lon: -74.0060, label: 'New York, USA' };
 }
 
