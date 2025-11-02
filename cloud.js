@@ -1,4 +1,4 @@
-// clouds.js — ES module (optimized for Edge / high-refresh displays)
+// clouds.js — ES module (optimized)
 import * as THREE from "https://esm.sh/three@0.158.0";
 import { OrbitControls } from "https://esm.sh/three@0.158.0/examples/jsm/controls/OrbitControls.js";
 
@@ -8,10 +8,8 @@ export function initClouds(containerEl) {
     if (containerEl.__cloudsInitialized) return containerEl;
     containerEl.__cloudsInitialized = true;
 
-    // ensure container positioned for overlays
     if (getComputedStyle(containerEl).position === 'static') containerEl.style.position = 'relative';
 
-    // pre-create surprise overlay (no DOM create/remove during RAF)
     let surprise = containerEl.querySelector('#cloudSurprise');
     if (!surprise) {
       surprise = document.createElement('div');
@@ -26,13 +24,11 @@ export function initClouds(containerEl) {
       containerEl.appendChild(surprise);
     }
 
-    // rect helper
     const getRect = () => {
       const r = containerEl.getBoundingClientRect();
       return { width: Math.max(1, Math.round(r.width)), height: Math.max(1, Math.round(r.height)) };
     };
 
-    // DPR / renderer setup — aggressive cap for high-refresh monitors
     const DPR_CAP = 1.0;
     const dpr = Math.min(DPR_CAP, Math.max(1, window.devicePixelRatio || 1));
 
@@ -50,12 +46,10 @@ export function initClouds(containerEl) {
 
     camera.position.set(0, 0.5, 4.5);
 
-    // lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.9); scene.add(ambientLight);
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2); directionalLight.position.set(2,3,2); scene.add(directionalLight);
     const pointLight = new THREE.PointLight(0xaabbee, 0.5, 15); pointLight.position.set(-1,1,3); scene.add(pointLight);
 
-    // OrbitControls: interactive but we avoid continuous updates unless user interacts
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.07;
@@ -66,7 +60,6 @@ export function initClouds(containerEl) {
     controls.maxPolarAngle = Math.PI/1.9;
     controls.target.set(0,0,0);
 
-    // Shared materials/geometries (lightweight)
     const cloudMaterial = new THREE.MeshStandardMaterial({
       color: 0xf0f8ff,
       transparent: true,
@@ -93,11 +86,10 @@ export function initClouds(containerEl) {
         const m = new THREE.Mesh(baseSphereGeom, cloudMaterial);
         m.position.copy(p.p);
         m.scale.setScalar(p.r);
-        m.raycast = () => {}; // exclude inner parts from raycast
+        m.raycast = () => {};
         g.add(m);
       });
 
-      // invisible collider for efficient raycasting
       const bboxGeom = new THREE.BoxGeometry(2.6, 1.4, 2.0);
       const bboxMat = new THREE.MeshBasicMaterial({ visible: false });
       const bbox = new THREE.Mesh(bboxGeom, bboxMat);
@@ -122,7 +114,6 @@ export function initClouds(containerEl) {
     cloudGroup.add(cloud1, cloud2);
     cloudGroup.position.y = -0.18;
 
-    // raindrops: shared geometry/materials, very few
     const dropGeom = new THREE.CylinderGeometry(0.008, 0.008, 0.16, 6);
     const dropMat1 = new THREE.MeshBasicMaterial({ color: 0x87CEFA, transparent: true, opacity: 0.72 });
     const dropMat2 = new THREE.MeshBasicMaterial({ color: 0xB0E0E6, transparent: true, opacity: 0.72 });
@@ -146,7 +137,6 @@ export function initClouds(containerEl) {
     const raindrops1 = createRainForCloud(cloud1, 6);
     const raindrops2 = createRainForCloud(cloud2, 6);
 
-    // Raycaster only against collider meshes
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
     function onCanvasClick(ev) {
@@ -156,14 +146,12 @@ export function initClouds(containerEl) {
       const colliders = [cloud1.userData.collider, cloud2.userData.collider].filter(Boolean);
       const intersects = raycaster.intersectObjects(colliders, true);
       if (intersects.length > 0) {
-        // toggle raining for both clouds (keeps behavior simple)
         const newState = !(cloud1.userData.isRaining && cloud2.userData.isRaining);
         cloud1.userData.isRaining = newState;
         cloud2.userData.isRaining = newState;
         cloud1.children.forEach(c => { if (c.type === 'Group') c.visible = newState; });
         cloud2.children.forEach(c => { if (c.type === 'Group') c.visible = newState; });
 
-        // pulse picked group
         const picked = intersects[0].object.parent || intersects[0].object;
         const origScale = picked.scale.clone();
         picked.scale.multiplyScalar(1.08);
@@ -177,14 +165,12 @@ export function initClouds(containerEl) {
     }
     renderer.domElement.addEventListener('click', onCanvasClick);
 
-    // tooltip hint
     const tooltip = containerEl.querySelector('#cloud-tooltip');
     setTimeout(() => {
       if (tooltip) tooltip.classList.add('opacity-100');
       setTimeout(() => { if (tooltip) tooltip.classList.remove('opacity-100'); }, 3200);
     }, 1200);
 
-    // Controlled RAF (cap FPS) and conservative motion
     const TARGET_FPS = 20;
     const FRAME_MS = 1000 / TARGET_FPS;
 
@@ -193,12 +179,10 @@ export function initClouds(containerEl) {
     let lastTime = performance.now();
     let accum = 0;
 
-    // motion only when hovered; short bob still allowed when idle but reduced
     let allowMotion = false;
     containerEl.addEventListener('pointerenter', () => { allowMotion = true; startLoop(); }, { passive: true });
     containerEl.addEventListener('pointerleave', () => { allowMotion = false; }, { passive: true });
 
-    // controls: update only after recent interaction
     let lastInteractionTime = 0;
     renderer.domElement.addEventListener('pointerdown', () => { lastInteractionTime = performance.now(); }, { passive: true });
 
@@ -214,7 +198,6 @@ export function initClouds(containerEl) {
         const logicalDt = accum / 1000;
         accum = 0;
 
-        // gentle rotation only when allowed
         if (allowMotion) cloudGroup.rotation.y += 0.0012 * (logicalDt * TARGET_FPS / TARGET_FPS);
 
         [cloud1, cloud2].forEach((cloud) => {
@@ -232,7 +215,6 @@ export function initClouds(containerEl) {
           }
         });
 
-        // controls.update only shortly after user interaction (reduces continuous damping updates)
         if (performance.now() - lastInteractionTime < 1200) controls.update();
 
         renderer.render(scene, camera);
@@ -252,7 +234,6 @@ export function initClouds(containerEl) {
       if (reqId) { cancelAnimationFrame(reqId); reqId = null; }
     }
 
-    // Pause when offscreen or when page hidden
     const io = new IntersectionObserver((entries) => {
       const e = entries[0];
       if (!e || !e.isIntersecting) stopLoop();
@@ -268,7 +249,6 @@ export function initClouds(containerEl) {
       }
     });
 
-    // Debounced resize
     let resizeTimer = null;
     function onResizeDebounced() {
       if (resizeTimer) clearTimeout(resizeTimer);
@@ -286,10 +266,8 @@ export function initClouds(containerEl) {
     }
     window.addEventListener('resize', onResizeDebounced);
 
-    // start (observer controls initial state)
     startLoop();
 
-    // teardown helper
     containerEl.__teardownClouds = () => {
       io.disconnect();
       stopLoop();
