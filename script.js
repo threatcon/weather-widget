@@ -231,7 +231,8 @@ setInterval(updateDateTime, 60_000);
     const dt = Math.min(60, t - lastTime) / 1000;
     lastTime = t;
 
-    cloudGroup.rotation.y += 0.002;
+    // rotation disabled to prevent flicker; keep gentle bobbing only
+// cloudGroup.rotation.y += 0.002;
     [cloud1, cloud2].forEach((cloud) => {
       if (!cloud) return;
       cloud.position.y = cloud.userData.originalPosition.y + Math.sin(t * cloud.userData.bobSpeed + cloud.userData.bobOffset) * cloud.userData.bobAmount;
