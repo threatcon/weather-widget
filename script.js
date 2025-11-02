@@ -1,12 +1,13 @@
-// script.js — Full widget script (drop-in). Includes a debug console.log for daily.time and timezone,
-// throttled/minimized DOM writes to avoid flicker, and timezone-aware 4-day forecast alignment.
+// script.js — Drop-in replacement (full file).
+// - Throttles/minimizes DOM writes to avoid flicker
+// - Uses Open-Meteo timezone (data.timezone) or utc_offset_seconds to align daily.time
+// - Includes console.debug logs to help diagnose date alignment
 //
-// Replace your current script.js with this file. The file expects your existing HTML IDs:
+// Expected HTML IDs:
 // dateTime, temperature, weatherIcon, location, precipitationChance, humidity, windSpeed,
-// sunriseTime, sunsetTime, dayLength, forecastContainer.
+// sunriseTime, sunsetTime, dayLength, forecastContainer
 //
-// NOTE: keep your index.html and styles.css as-is. If you previously initialized clouds separately,
-// re-add that call after initialization if needed.
+// Replace your current script.js with this file.
 
 (function () {
   /* ---------- Small DOM helpers ---------- */
@@ -16,7 +17,6 @@
     if (el.textContent === s) return;
     el.textContent = s;
   }
-
   function batchWrite(fn) {
     if (typeof requestAnimationFrame === 'function') requestAnimationFrame(fn);
     else fn();
@@ -37,7 +37,7 @@
     forecastContainer: document.getElementById('forecastContainer')
   };
 
-  /* ---------- Date/time throttled updater (writes only on minute change) ---------- */
+  /* ---------- Date/time throttled updater (minute-level) ---------- */
   let lastMinuteKey = null;
   function updateDateTimeThrottled() {
     const now = new Date();
@@ -51,7 +51,7 @@
   setInterval(updateDateTimeThrottled, 1000);
   updateDateTimeThrottled();
 
-  /* ---------- Simple fetch with retries ---------- */
+  /* ---------- Fetch with simple retries ---------- */
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   async function fetchWithRetries(url, opts = {}, tries = 3, backoff = 300) {
     for (let i = 0; i < tries; i++) {
@@ -66,7 +66,7 @@
     }
   }
 
-  /* ---------- Weather helpers ---------- */
+  /* ---------- Weather icon mapping ---------- */
   function weatherCodeToIcon(code, isDay = true) {
     if (code === 0) return isDay ? '☀️' : '🌙';
     if ([1,2].includes(code)) return '⛅';
@@ -80,66 +80,93 @@
     return '⛅';
   }
 
-  function formatTimeISOToLocal(iso, tz) {
+  /* ---------- Timezone-aware helpers ---------- */
+  function yyyyMmDdInZone(date, timeZone) {
     try {
-      // Use Intl if timezone provided; fallback to Date parse
-      if (tz) return new Intl.DateTimeFormat(undefined, { timeZone: tz, hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
-      return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+      const y = parts.find(p => p.type === 'year').value;
+      const m = parts.find(p => p.type === 'month').value;
+      const d = parts.find(p => p.type === 'day').value;
+      return `${y}-${m}-${d}`;
     } catch (e) {
-      return iso;
+      return null;
+    }
+  }
+  function yyyyMmDdWithOffset(now, utc_offset_seconds) {
+    try {
+      const shifted = new Date(now.getTime() + (utc_offset_seconds || 0) * 1000);
+      const y = shifted.getUTCFullYear();
+      const m = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(shifted.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    } catch (e) {
+      return null;
     }
   }
 
-  /* ---------- Timezone-aware YYYY-MM-DD generator ---------- */
-  function yyyyMmDdInZone(date, timeZone) {
-    // Use 'en-CA' ensures YYYY-MM-DD format via parts
-    const fmt = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' });
-    const parts = fmt.formatToParts(date);
-    const y = parts.find(p => p.type === 'year').value;
-    const m = parts.find(p => p.type === 'month').value;
-    const d = parts.find(p => p.type === 'day').value;
-    return `${y}-${m}-${d}`;
-  }
-
-  /* ---------- Forecast builder: timezone-aware and robust ---------- */
-  function buildForecastCards(container, dailyData, apiTz) {
+  /* ---------- Forecast builder (timezone aware, robust) ---------- */
+  function buildForecastCards(container, dailyData, apiTz, utcOffsetSeconds) {
     if (!container || !dailyData || !Array.isArray(dailyData.time)) return;
 
-    // Debug: output daily.time and timezone for inspection
-    console.log('DEBUG daily.time sample:', dailyData.time.slice(0, 8), 'timezone:', apiTz);
+    // Debug output for inspection
+    console.debug('DEBUG daily.time sample:', dailyData.time.slice(0, 8));
+    console.debug('DEBUG api timezone:', apiTz, 'utc_offset_seconds:', utcOffsetSeconds);
 
     const times = dailyData.time;
-    // compute today's YYYY-MM-DD in API timezone
-    let tz = apiTz;
-    if (!tz) {
-      // fallback to browser timezone
-      tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    }
-    const todayStr = yyyyMmDdInZone(new Date(), tz);
+    const now = new Date();
 
-    // find start index where daily.time equals todayStr (in API tz)
+    // Compute today string in API timezone or via utc offset; fallback to browser local
+    let todayStr = null;
+    if (apiTz) todayStr = yyyyMmDdInZone(now, apiTz);
+    if (!todayStr && (typeof utcOffsetSeconds === 'number')) todayStr = yyyyMmDdWithOffset(now, utcOffsetSeconds);
+    if (!todayStr) {
+      const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0'), d = String(now.getDate()).padStart(2, '0');
+      todayStr = `${y}-${m}-${d}`;
+    }
+
+    // Determine start index matching todayStr
     let startIdx = times.findIndex(t => t === todayStr);
 
-    // fallback: if not found, check shifted sequences (common case where API returns yesterday first)
+    // Heuristics for common shifts
     if (startIdx === -1 && times.length >= 2) {
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yStr = yyyyMmDdInZone(yesterday, tz);
+      // If first is yesterday and second is today, shift by 1
+      const yesterday = new Date(now);
+      yesterday.setDate(now.getDate() - 1);
+      let yStr = null;
+      if (apiTz) yStr = yyyyMmDdInZone(yesterday, apiTz);
+      else if (typeof utcOffsetSeconds === 'number') yStr = yyyyMmDdWithOffset(yesterday, utcOffsetSeconds);
+      else {
+        const yy = yesterday.getFullYear(), mm = String(yesterday.getMonth() + 1).padStart(2, '0'), dd = String(yesterday.getDate()).padStart(2, '0');
+        yStr = `${yy}-${mm}-${dd}`;
+      }
       if (times[0] === yStr && times[1] === todayStr) startIdx = 1;
     }
 
-    // last resort: try matching substring with possible timezone shift or choose 0
+    // Another attempt: convert each times[i] into the API timezone local date and compare
     if (startIdx === -1) {
-      // attempt to match by converting times[i] to date in api tz and compare
       for (let i = 0; i < times.length; i++) {
-        const dIso = `${times[i]}T00:00:00`;
+        const candidateIso = `${times[i]}T00:00:00`;
         try {
-          const label = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(dIso));
-          if (label === todayStr) { startIdx = i; break; }
+          let candidateStr = null;
+          if (apiTz) candidateStr = yyyyMmDdInZone(new Date(candidateIso), apiTz);
+          else if (typeof utcOffsetSeconds === 'number') {
+            // compute candidate date with offset relative to UTC midnight
+            const dt = new Date(candidateIso);
+            candidateStr = yyyyMmDdWithOffset(dt, utcOffsetSeconds);
+          } else {
+            const dt = new Date(candidateIso);
+            const yy = dt.getFullYear(), mm = String(dt.getMonth() + 1).padStart(2,'0'), dd = String(dt.getDate()).padStart(2,'0');
+            candidateStr = `${yy}-${mm}-${dd}`;
+          }
+          if (candidateStr === todayStr) { startIdx = i; break; }
         } catch (e) { /* ignore */ }
       }
     }
+
+    // Final fallback
     if (startIdx === -1) startIdx = 0;
+
+    console.debug('DEBUG computed todayStr:', todayStr, '=> startIdx:', startIdx);
 
     const needRebuild = !container._built || container._startIdx !== startIdx || container._len !== times.length;
     if (!needRebuild) return;
@@ -148,10 +175,9 @@
     container._startIdx = startIdx;
     container._len = times.length;
 
-    // clear existing nodes
+    // Clear container
     while (container.firstChild) container.removeChild(container.firstChild);
 
-    // build up to 4 cards starting at startIdx
     const maxCards = 4;
     for (let i = 0; i < maxCards; i++) {
       const idx = startIdx + i;
@@ -159,7 +185,11 @@
       const dayIso = times[idx]; // YYYY-MM-DD
       const dObj = new Date(`${dayIso}T00:00:00`);
       const isToday = (idx === startIdx);
-      const label = isToday ? 'Today' : new Intl.DateTimeFormat(undefined, { weekday: 'short', timeZone: tz }).format(dObj);
+      const label = isToday
+        ? 'Today'
+        : (apiTz ? new Intl.DateTimeFormat(undefined, { weekday: 'short', timeZone: apiTz }).format(dObj)
+                 : new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(dObj));
+
       const hi = (dailyData.temperature_2m_max && dailyData.temperature_2m_max[idx] != null) ? Math.round(dailyData.temperature_2m_max[idx]) : '—';
       const lo = (dailyData.temperature_2m_min && dailyData.temperature_2m_min[idx] != null) ? Math.round(dailyData.temperature_2m_min[idx]) : '—';
       const code = (dailyData.weathercode && dailyData.weathercode[idx] != null) ? dailyData.weathercode[idx] : null;
@@ -183,13 +213,13 @@
     }
   }
 
-  /* ---------- Render function (data = API response) ---------- */
-  async function renderUI(data, locationLabel) {
+  /* ---------- Render UI from API response ---------- */
+  function renderUI(data, locationLabel) {
+    if (!data) return;
     try {
-      if (!data) return;
       const current = data.current_weather ?? null;
 
-      // determine index in hourly arrays nearest to now
+      // find nearest hourly index
       let hourlyIdx = 0;
       if (Array.isArray(data.hourly?.time) && data.hourly.time.length) {
         const now = new Date();
@@ -232,35 +262,43 @@
         }
       });
 
-      // Build forecast using timezone-aware logic; includes console.log for debugging
+      // Build forecast cards (timezone-aware)
       if (EL.forecastContainer && data.daily) {
-        buildForecastCards(EL.forecastContainer, data.daily, data.timezone);
+        // pass both timezone and utc offset if present
+        const utcOffset = (typeof data.utc_offset_seconds === 'number') ? data.utc_offset_seconds
+                        : (typeof data.utc_offset_seconds === 'string' && data.utc_offset_seconds ? Number(data.utc_offset_seconds) : null);
+        buildForecastCards(EL.forecastContainer, data.daily, data.timezone, utcOffset);
       }
     } catch (err) {
       console.error('renderUI error', err);
     }
   }
 
-  /* ---------- Location detection / weather fetch (simplified) ---------- */
+  function formatTimeISOToLocal(iso, tz) {
+    try {
+      if (tz) return new Intl.DateTimeFormat(undefined, { timeZone: tz, hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
+      return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    } catch (e) {
+      return iso;
+    }
+  }
+
+  /* ---------- Simple location detection + fetch ---------- */
   function getSavedLocation() {
     try {
       const raw = localStorage.getItem('weather_widget_location');
       if (!raw) return null;
       return JSON.parse(raw);
-    } catch (e) {
-      return null;
-    }
+    } catch (e) { return null; }
   }
-
   async function detectLocationFallback() {
     const saved = getSavedLocation();
     if (saved && typeof saved.lat === 'number' && typeof saved.lon === 'number') return saved;
-    // fallback coords (NYC)
+    // fallback to New York
     return { lat: 40.7128, lon: -74.0060, label: 'New York, USA' };
   }
 
   const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1/forecast';
-
   async function fetchWeather(lat, lon) {
     const params = new URLSearchParams({
       latitude: lat,
@@ -276,25 +314,22 @@
     return await fetchWithRetries(url, {}, 3, 400);
   }
 
-  /* ---------- Initialization ---------- */
+  /* ---------- Init ---------- */
   async function initWidget() {
     try {
       const loc = await detectLocationFallback();
       setTextIfChanged(EL.location, loc.label || `${loc.lat.toFixed(3)}, ${loc.lon.toFixed(3)}`);
 
-      const data = await fetchWeather(loc.lat, loc.lon).catch(e => {
-        console.error('fetchWeather failed', e);
-        return null;
-      });
-      if (data) await renderUI(data, loc.label);
+      const data = await fetchWeather(loc.lat, loc.lon).catch(e => { console.error('fetchWeather error', e); return null; });
+      if (data) renderUI(data, loc.label);
 
-      // periodic refresh once per hour
+      // refresh once per hour
       setInterval(async () => {
         const d = await fetchWeather(loc.lat, loc.lon).catch(e => { console.error(e); return null; });
         if (d) renderUI(d, loc.label);
       }, 60 * 60 * 1000);
-    } catch (err) {
-      console.error('initWidget error', err);
+    } catch (e) {
+      console.error('initWidget error', e);
     }
   }
 
@@ -304,6 +339,6 @@
     initWidget().catch(e => console.error(e));
   }
 
-  // expose for debugging
-  window.__weatherWidget = { renderUI, buildForecastCards };
+  // expose helpers for debugging in console
+  window.__weatherWidgetDebug = { buildForecastCards, renderUI };
 })();
