@@ -1,4 +1,3 @@
-
 // Robust optimized script.js — Type = module
 // Changes applied: DPR cap, antialias disabled, controlled RAF (IntersectionObserver pause/resume),
 // debounced resize, reduced geometry detail, shared geometries/materials, reduced raindrops,
@@ -22,9 +21,9 @@ const SELECTORS = {
   dayLength: 'dayLength',
   forecastContainer: 'forecastContainer',
   cloudContainer: 'cloud-container',
-  cloudTooltip: 'cloud-tooltip' };
-
-const EL = Object.fromEntries(Object.entries(SELECTORS).map(([k, v]) => [k, document.getElementById(v)]));
+  cloudTooltip: 'cloud-tooltip'
+};
+const EL = Object.fromEntries(Object.entries(SELECTORS).map(([k,v]) => [k, document.getElementById(v)]));
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function fetchWithRetries(url, opts = {}, tries = 3, backoff = 400) {
@@ -34,29 +33,29 @@ async function fetchWithRetries(url, opts = {}, tries = 3, backoff = 400) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
     } catch (err) {
-      console.warn(`fetch attempt ${i + 1} failed for ${url}`, err);
-      if (i < tries - 1) await sleep(backoff * (i + 1));else
-      throw err;
+      console.warn(`fetch attempt ${i+1} failed for ${url}`, err);
+      if (i < tries - 1) await sleep(backoff * (i + 1));
+      else throw err;
     }
   }
 }
 
 /* ---------- small utilities ---------- */
-function setText(el, text) {if (el) el.textContent = text;}
+function setText(el, text) { if (el) el.textContent = text; }
 function weatherCodeToIcon(code, isDay) {
   if ([0].includes(code)) return isDay ? '☀️' : '🌙';
-  if ([1, 2].includes(code)) return '⛅';
+  if ([1,2].includes(code)) return '⛅';
   if ([3].includes(code)) return '☁️';
-  if ([45, 48].includes(code)) return '🌫️';
-  if ([51, 53, 55, 56, 57].includes(code)) return '🌦️';
-  if ([61, 63, 65, 66, 67].includes(code)) return '🌧️';
-  if ([71, 73, 75, 77, 85, 86].includes(code)) return '🌨️';
-  if ([80, 81, 82].includes(code)) return '🌧️';
-  if ([95, 96, 99].includes(code)) return '⛈️';
+  if ([45,48].includes(code)) return '🌫️';
+  if ([51,53,55,56,57].includes(code)) return '🌦️';
+  if ([61,63,65,66,67].includes(code)) return '🌧️';
+  if ([71,73,75,77,85,86].includes(code)) return '🌨️';
+  if ([80,81,82].includes(code)) return '🌧️';
+  if ([95,96,99].includes(code)) return '⛈️';
   return '⛅';
 }
-function formatTimeISOToLocal(isoStr) {try {return new Date(isoStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });} catch {return isoStr;}}
-function formatDurationSeconds(sec) {const h = Math.floor(sec / 3600);const m = Math.floor(sec % 3600 / 60);return `${h} h ${m} m`;}
+function formatTimeISOToLocal(isoStr) { try { return new Date(isoStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); } catch { return isoStr; } }
+function formatDurationSeconds(sec) { const h = Math.floor(sec/3600); const m = Math.floor((sec%3600)/60); return `${h} h ${m} m`; }
 
 /* ---------- date/time ---------- */
 function updateDateTime() {
@@ -71,7 +70,7 @@ setInterval(updateDateTime, 60_000);
 /* ---------- 3D cloud scene (optimized) ---------- */
 (function initCloudScene() {
   const container = EL.cloudContainer;
-  if (!container) {console.error("cloud-container not found");return;}
+  if (!container) { console.error("cloud-container not found"); return; }
 
   // Pre-created surprise overlay inside container (must exist in HTML). If absent, we'll create a lightweight element outside RAF.
   let surprise = container.querySelector('#cloudSurprise');
@@ -113,15 +112,15 @@ setInterval(updateDateTime, 60_000);
 
   camera.position.set(0, 0.5, 4.5);
 
-  const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);scene.add(ambientLight);
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.6);directionalLight.position.set(2, 3, 2);scene.add(directionalLight);
-  const pointLight = new THREE.PointLight(0xaabbee, 0.6, 15);pointLight.position.set(-1, 1, 3);scene.add(pointLight);
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1.0); scene.add(ambientLight);
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.6); directionalLight.position.set(2,3,2); scene.add(directionalLight);
+  const pointLight = new THREE.PointLight(0xaabbee, 0.6, 15); pointLight.position.set(-1,1,3); scene.add(pointLight);
 
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.enableDamping = true;controls.dampingFactor = 0.07;controls.rotateSpeed = 0.8;
-  controls.enableZoom = false;controls.enablePan = false;
-  controls.minPolarAngle = Math.PI / 3;controls.maxPolarAngle = Math.PI / 1.8;
-  controls.target.set(0, 0, 0);
+  controls.enableDamping = true; controls.dampingFactor = 0.07; controls.rotateSpeed = 0.8;
+  controls.enableZoom = false; controls.enablePan = false;
+  controls.minPolarAngle = Math.PI/3; controls.maxPolarAngle = Math.PI/1.8;
+  controls.target.set(0,0,0);
 
   // Shared materials/geometries for performance
   const cloudMaterial = new THREE.MeshStandardMaterial({
@@ -129,8 +128,8 @@ setInterval(updateDateTime, 60_000);
     transparent: true,
     opacity: 0.85,
     roughness: 0.6,
-    metalness: 0.0 });
-
+    metalness: 0.0
+  });
   // lower-resolution sphere geometry and reuse (scale via mesh.scale)
   const baseSphereGeom = new THREE.SphereGeometry(1.0, 12, 12);
 
@@ -139,15 +138,15 @@ setInterval(updateDateTime, 60_000);
     g.position.set(x, y, z);
     g.scale.set(scale, scale, scale);
     const parts = [
-    { r: 0.8, p: new THREE.Vector3(0, 0, 0) },
-    { r: 0.6, p: new THREE.Vector3(0.7, 0.2, 0.1) },
-    { r: 0.55, p: new THREE.Vector3(-0.6, 0.1, -0.2) },
-    { r: 0.7, p: new THREE.Vector3(0.1, 0.4, -0.3) },
-    { r: 0.5, p: new THREE.Vector3(0.3, -0.3, 0.2) },
-    { r: 0.6, p: new THREE.Vector3(-0.4, -0.2, 0.3) },
-    { r: 0.45, p: new THREE.Vector3(0.8, -0.1, -0.2) },
-    { r: 0.5, p: new THREE.Vector3(-0.7, 0.3, 0.3) }];
-
+      { r: 0.8, p: new THREE.Vector3(0,0,0) },
+      { r: 0.6, p: new THREE.Vector3(0.7,0.2,0.1) },
+      { r: 0.55, p: new THREE.Vector3(-0.6,0.1,-0.2) },
+      { r: 0.7, p: new THREE.Vector3(0.1,0.4,-0.3) },
+      { r: 0.5, p: new THREE.Vector3(0.3,-0.3,0.2) },
+      { r: 0.6, p: new THREE.Vector3(-0.4,-0.2,0.3) },
+      { r: 0.45, p: new THREE.Vector3(0.8,-0.1,-0.2) },
+      { r: 0.5, p: new THREE.Vector3(-0.7,0.3,0.3) }
+    ];
     parts.forEach(p => {
       const m = new THREE.Mesh(baseSphereGeom, cloudMaterial);
       m.position.copy(p.p);
@@ -170,12 +169,12 @@ setInterval(updateDateTime, 60_000);
       originalPosition: g.position.clone(),
       bobOffset: Math.random() * Math.PI * 2,
       bobSpeed: 0.0005 + Math.random() * 0.0003,
-      bobAmount: 0.12 + Math.random() * 0.08 };
-
+      bobAmount: 0.12 + Math.random() * 0.08
+    };
     return g;
   }
 
-  const cloudGroup = new THREE.Group();scene.add(cloudGroup);
+  const cloudGroup = new THREE.Group(); scene.add(cloudGroup);
   const cloud1 = createCloudGroup(-0.7, 0.2, 0, 1.0);
   const cloud2 = createCloudGroup(0.7, -0.1, 0.3, 0.9);
   cloudGroup.add(cloud1, cloud2);
@@ -210,7 +209,7 @@ setInterval(updateDateTime, 60_000);
   const mouse = new THREE.Vector2();
   function onCanvasClick(ev) {
     const rect = renderer.domElement.getBoundingClientRect();
-    mouse.x = (ev.clientX - rect.left) / rect.width * 2 - 1;
+    mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
     // raycast against collider meshes only
     const colliders = [cloud1.userData.collider, cloud2.userData.collider].filter(Boolean);
@@ -222,17 +221,17 @@ setInterval(updateDateTime, 60_000);
       if (!picked) return;
       // toggle raining for both clouds as original behavior
       const newState = !(cloud1.userData.isRaining && cloud2.userData.isRaining);
-      cloud1.userData.isRaining = newState;cloud1.children.forEach(c => {if (c.type === 'Group') c.visible = newState;});
-      cloud2.userData.isRaining = newState;cloud2.children.forEach(c => {if (c.type === 'Group') c.visible = newState;});
+      cloud1.userData.isRaining = newState; cloud1.children.forEach(c => { if (c.type === 'Group') c.visible = newState; });
+      cloud2.userData.isRaining = newState; cloud2.children.forEach(c => { if (c.type === 'Group') c.visible = newState; });
       // pulse scale on the picked group
       const originalScale = picked.scale.clone();
       picked.scale.multiplyScalar(1.12);
-      setTimeout(() => {picked.scale.copy(originalScale);}, 140);
+      setTimeout(() => { picked.scale.copy(originalScale); }, 140);
 
       // show CSS surprise overlay (no DOM creation in RAF)
       if (surprise) {
         surprise.style.opacity = '1';
-        setTimeout(() => {if (surprise) surprise.style.opacity = '0';}, 900);
+        setTimeout(() => { if (surprise) surprise.style.opacity = '0'; }, 900);
       }
     }
   }
@@ -242,7 +241,7 @@ setInterval(updateDateTime, 60_000);
   const tooltip = EL.cloudTooltip;
   setTimeout(() => {
     if (tooltip) tooltip.classList.add('opacity-100');
-    setTimeout(() => {if (tooltip) tooltip.classList.remove('opacity-100');}, 3500);
+    setTimeout(() => { if (tooltip) tooltip.classList.remove('opacity-100'); }, 3500);
   }, 1500);
 
   // Controlled RAF loop with IntersectionObserver to pause when offscreen
@@ -251,7 +250,7 @@ setInterval(updateDateTime, 60_000);
   let lastTime = performance.now();
 
   function animateFrame(time) {
-    if (!running) {reqId = null;return;}
+    if (!running) { reqId = null; return; }
     const t = time || performance.now();
     const dt = Math.min(60, t - lastTime) / 1000;
     lastTime = t;
@@ -260,11 +259,11 @@ setInterval(updateDateTime, 60_000);
     cloudGroup.rotation.y += 0.002;
 
     // per-cloud bob and rain update
-    [cloud1, cloud2].forEach(cloud => {
+    [cloud1, cloud2].forEach((cloud) => {
       if (!cloud) return;
       cloud.position.y = cloud.userData.originalPosition.y + Math.sin(t * cloud.userData.bobSpeed + cloud.userData.bobOffset) * cloud.userData.bobAmount;
       if (cloud.userData.isRaining) {
-        const cur = cloud === cloud1 ? raindrops1 : raindrops2;
+        const cur = (cloud === cloud1) ? raindrops1 : raindrops2;
         cur.forEach(r => {
           r.position.y -= r.userData.speed * dt * 60;
           if (r.position.y < -2.8) {
@@ -290,13 +289,13 @@ setInterval(updateDateTime, 60_000);
   }
   function stopLoop() {
     running = false;
-    if (reqId) {cancelAnimationFrame(reqId);reqId = null;}
+    if (reqId) { cancelAnimationFrame(reqId); reqId = null; }
   }
 
-  const io = new IntersectionObserver(entries => {
+  const io = new IntersectionObserver((entries) => {
     const e = entries[0];
-    if (!e || !e.isIntersecting) stopLoop();else
-    startLoop();
+    if (!e || !e.isIntersecting) stopLoop();
+    else startLoop();
   }, { threshold: 0.05 });
   io.observe(container);
 
@@ -306,7 +305,7 @@ setInterval(updateDateTime, 60_000);
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       const r = getRect();
-      const w = r.width,h = r.height;
+      const w = r.width, h = r.height;
       // only update when changed
       const cur = renderer.getSize(new THREE.Vector2());
       if (cur.x !== w || cur.y !== h) {
@@ -337,16 +336,16 @@ setInterval(updateDateTime, 60_000);
 (function weatherLogic() {
   const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast';
   const IP_PROVIDERS = [
-  { url: 'https://ipapi.co/json/', mapper: j => j && j.latitude && j.longitude ? { lat: Number(j.latitude), lon: Number(j.longitude), label: [j.city, j.region, j.country_name].filter(Boolean).join(', ') } : null },
-  { url: 'https://ipwho.is/', mapper: j => j && j.success !== false && j.latitude && j.longitude ? { lat: Number(j.latitude), lon: Number(j.longitude), label: [j.city, j.region, j.country].filter(Boolean).join(', ') } : null }];
-
+    { url: 'https://ipapi.co/json/', mapper: j => j && j.latitude && j.longitude ? { lat: Number(j.latitude), lon: Number(j.longitude), label: [j.city, j.region, j.country_name].filter(Boolean).join(', ') } : null },
+    { url: 'https://ipwho.is/', mapper: j => j && j.success !== false && j.latitude && j.longitude ? { lat: Number(j.latitude), lon: Number(j.longitude), label: [j.city, j.region, j.country].filter(Boolean).join(', ') } : null }
+  ];
 
   async function getIpLocation() {
     for (const p of IP_PROVIDERS) {
       try {
         const json = await fetchWithRetries(p.url, {}, 2, 300);
         const mapped = p.mapper(json);
-        if (mapped) {console.log('ip provider succeeded', p.url, mapped);return mapped;}
+        if (mapped) { console.log('ip provider succeeded', p.url, mapped); return mapped; }
       } catch (e) {
         console.warn('IP provider failed', p.url, e);
       }
@@ -361,8 +360,8 @@ setInterval(updateDateTime, 60_000);
       hourly: 'precipitation_probability,relativehumidity_2m,temperature_2m,windspeed_10m,weathercode',
       daily: 'weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset',
       current_weather: 'true', timezone: 'auto',
-      temperature_unit: 'fahrenheit', windspeed_unit: 'mph' });
-
+      temperature_unit: 'fahrenheit', windspeed_unit: 'mph'
+    });
     const url = `${OPEN_METEO}?${params.toString()}`;
     return await fetchWithRetries(url, {}, 3, 400);
   }
@@ -379,12 +378,12 @@ setInterval(updateDateTime, 60_000);
           let idx = times.findIndex(t => t >= now);
           if (idx === -1) idx = times.length - 1;
           return idx;
-        } catch {return 0;}
+        } catch { return 0; }
       })();
 
       // temperature & icon
       let tempDisplay = '—';
-      let code = 0,isDay = true;
+      let code = 0, isDay = true;
       if (current && typeof current.temperature !== 'undefined') {
         tempDisplay = `${Math.round(current.temperature)}°F`;
         code = current.weathercode;
@@ -417,7 +416,7 @@ setInterval(updateDateTime, 60_000);
         const sunset = data.daily.sunset[0];
         setText(EL.sunriseTime, formatTimeISOToLocal(sunrise));
         setText(EL.sunsetTime, formatTimeISOToLocal(sunset));
-        setText(EL.dayLength, formatDurationSeconds(Math.max(0, Math.round((new Date(sunset) - new Date(sunrise)) / 1000))));
+        setText(EL.dayLength, formatDurationSeconds(Math.max(0, Math.round((new Date(sunset) - new Date(sunrise))/1000))));
       }
 
       // forecast: first 4 days
@@ -437,7 +436,7 @@ setInterval(updateDateTime, 60_000);
           const card = document.createElement('div');
           card.className = 'forecast-day bg-white/5 backdrop-blur-sm rounded-xl p-3 w-20 text-center border border-white/10 shadow-sm hover:bg-white/10 transition-all duration-200 cursor-pointer transform hover:-translate-y-1 animate-fadeInUp';
           card.innerHTML = `<div class="day-name text-xs font-medium mb-1 opacity-80">${label}</div>
-                            <div class="forecast-icon text-2xl my-1 drop-shadow-md">${weatherCodeToIcon(codeDay, true)}</div>
+                            <div class="forecast-icon text-2xl my-1 drop-shadow-md">${weatherCodeToIcon(codeDay,true)}</div>
                             <div class="high-temp text-sm font-semibold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300">${hi}°</div>
                             <div class="low-temp text-xs opacity-70">${lo}°</div>`;
           card.addEventListener('click', () => {
@@ -460,8 +459,8 @@ setInterval(updateDateTime, 60_000);
       const ip = await getIpLocation();
       const defaultCoords = { lat: 40.7128, lon: -74.0060, label: 'New York, USA' };
       const used = ip || defaultCoords;
-      const data = await fetchWeatherFor(used.lat, used.lon).catch(e => {console.error('fetchWeatherFor failed', e);return null;});
-      if (!data) {setText(EL.location, 'Weather unavailable');return;}
+      const data = await fetchWeatherFor(used.lat, used.lon).catch(e => { console.error('fetchWeatherFor failed', e); return null; });
+      if (!data) { setText(EL.location, 'Weather unavailable'); return; }
       await renderUI(data, used.label);
     } catch (err) {
       console.error('initWeather outer error', err);
@@ -471,7 +470,7 @@ setInterval(updateDateTime, 60_000);
 
   // initial + periodic
   initWeather().catch(e => console.error(e));
-  setInterval(() => {initWeather().catch(e => console.error('periodic weather error', e));}, 60 * 60 * 1000);
+  setInterval(() => { initWeather().catch(e => console.error('periodic weather error', e)); }, 60 * 60 * 1000);
 
   // getIpLocation moved to top-level inside weatherLogic (reuse earlier helper)
   async function getIpLocation() {
@@ -479,11 +478,9 @@ setInterval(updateDateTime, 60_000);
       try {
         const json = await fetchWithRetries(p.url, {}, 2, 300);
         const mapped = p.mapper(json);
-        if (mapped) {return mapped;}
-      } catch (e) {/* ignore */}
+        if (mapped) { return mapped; }
+      } catch (e) { /* ignore */ }
     }
     return null;
   }
 })();
-//# sourceURL=pen.js
-  
