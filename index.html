@@ -1,1 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Weather Widget</title>
 
+  <!-- Tailwind CDN is optional; keep if your CSS uses Tailwind classes -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Your CSS -->
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <!-- copy the widget HTML you posted (cloud container must include cloudSurprise overlay) -->
+  <div class="body-wrapper min-h-screen flex justify-center items-center p-4">
+    <div class="weather-widget-container relative w-full max-w-sm sm:max-w-md">
+      <div class="weather-widget relative text-white bg-gradient-to-br from-gray-900/90 via-neutral-900/90 to-black/100 backdrop-blur-lg shadow-2xl rounded-3xl p-6 overflow-hidden border border-white/6">
+        <div id="cloud-container" class="absolute top-0 right-0 w-36 h-36 sm:w-40 sm:h-40 z-30 cursor-pointer rounded-tr-3xl overflow-hidden">
+          <div id="cloud-tooltip" class="tooltip absolute top-20 right-2 sm:top-24 sm:right-4 bg-black/85 text-white px-3 py-1.5 rounded-md text-xs opacity-0 transition-opacity duration-300 pointer-events-none z-40 shadow-lg">
+            Click clouds for a surprise!
+            <div class="absolute -top-1 right-3 w-3 h-3 bg-black/85 transform rotate-45"></div>
+          </div>
+
+          <!-- Pre-created overlay used by optimized JS (no DOM create/remove during RAF) -->
+          <div id="cloudSurprise" aria-hidden="true" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:60;opacity:0;transition:opacity .45s ease;">
+            <div style="font-size:36px;filter:drop-shadow(0 6px 10px rgba(0,0,0,0.6))">🎉</div>
+          </div>
+        </div>
+
+        <div class="relative z-20">
+          <div class="date-time text-sm font-light opacity-70 mb-1 tracking-wide animate-fadeInUp" id="dateTime">Thursday, 09:24</div>
+
+          <div class="current-weather flex items-center mb-2">
+            <div class="weather-icon-main text-5xl mr-3" id="weatherIcon">⛅</div>
+            <div class="temp text-5xl font-semibold">
+              <span class="bg-clip-text text-transparent bg-gradient-to-r from-white/90 to-slate-300/70 animate-fadeInScaleUp delay-100" id="temperature">46°F</span>
+            </div>
+          </div>
+
+          <div class="location text-lg opacity-85 mb-4 tracking-wide animate-fadeInUp delay-200" id="location">New York, USA</div>
+
+          <div class="sun-info bg-black/30 backdrop-blur-sm rounded-2xl p-3 sm:p-4 flex justify-between items-center mb-4 border border-white/4 shadow-md animate-fadeInUp delay-300">
+            <div class="sunrise text-center">
+              <div class="sun-icon text-xl mb-1">☀️</div>
+              <div class="text-xs opacity-70" id="sunriseTime">6:14 am</div>
+            </div>
+            <div class="day-length text-center text-sm opacity-80" id="dayLength">11 h 42 m</div>
+            <div class="sunset text-center">
+              <div class="sun-icon text-xl mb-1">🌙</div>
+              <div class="text-xs opacity-70" id="sunsetTime">5:56 pm</div>
+            </div>
+          </div>
+
+          <div class="precipitation bg-white/6 backdrop-blur-sm rounded-xl p-3 flex items-center mb-4 border border-white/3 shadow-sm animate-fadeInUp delay-400">
+            <div class="precip-icon text-2xl mr-2 text-sky-300 drop-shadow-lg animate-gentleBob" id="precipIcon">🌧️</div>
+            <div class="text-sm opacity-85" id="precipitationChance">Precip —</div>
+          </div>
+
+          <div class="humidity-wind flex justify-between text-sm opacity-85 mb-5 animate-fadeInUp delay-500">
+            <div id="humidity">Humidity: —</div>
+            <div id="windSpeed">Wind: —</div>
+          </div>
+
+          <div class="forecast flex flex-nowrap justify-between pb-2" id="forecastContainer">
+            <!-- JS will populate forecast cards -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load the widget script (ES module) -->
+  <script type="module" src="./script.js"></script>
+</body>
+</html>
