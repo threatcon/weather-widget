@@ -1,24 +1,90 @@
 :root { --bg: #0b1220; --muted: rgba(255,255,255,0.7); }
+body { margin:0; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; background:var(--bg); color:#fff; font-family:Outfit,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial; }
 
-body { margin:0; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; background:var(--bg); color:#fff; }
-
-/* Forecast card small animation placeholder */
+/* Forecast card */
 .forecast-day { transition: transform .18s ease, background-color .18s ease; }
 .forecast-day:hover { transform: translateY(-6px); }
 
-/* Modal visibility */
-#weather-config-modal.open { opacity: 1; pointer-events: auto; }
+/* Tooltip helper */
+.tooltip.opacity-100 { opacity: 1 !important; }
 
 /* Ensure cloud container is positioned */
 #cloud-container { position: absolute; }
 
-/* Small utility */
-.tooltip.opacity-100 { opacity: 1 !important; }
+/* Slide-out config panel (right side) */
+.config-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 100%;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 120;
+  transition: width 260ms cubic-bezier(.2,.9,.25,1), box-shadow 200ms;
+  box-shadow: none;
+}
+.config-panel.open {
+  width: 320px;
+  pointer-events: auto;
+  box-shadow: -20px 0 40px rgba(0,0,0,0.45);
+}
+.config-panel-inner {
+  height: 100%;
+  background: linear-gradient(180deg, rgba(6,6,6,0.99), rgba(20,20,20,0.99));
+  color: #fff;
+  padding: 14px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+.config-panel-header {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:8px;
+  margin-bottom:8px;
+}
+.config-close {
+  background: transparent;
+  border: 0;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  padding:6px;
+  border-radius:8px;
+}
+.config-panel-body { flex:1; display:flex; flex-direction:column; gap:10px; }
+.muted { color: rgba(255,255,255,0.75); font-size:13px; margin:0; }
+.label { font-size:13px; color: rgba(255,255,255,0.9); margin-top:6px; }
+.config-row { display:flex; gap:8px; align-items:center; }
+.config-input {
+  flex:1;
+  padding:8px;
+  border-radius:8px;
+  border:1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.02);
+  color:#fff;
+  outline: none;
+}
+.icon-btn {
+  padding:8px 10px;
+  border-radius:8px;
+  border:0;
+  background: rgba(255,255,255,0.04);
+  color:#fff;
+  cursor:pointer;
+}
+.config-msg { min-height:18px; font-size:13px; color: rgba(255,255,255,0.85); }
+.config-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:auto; }
+.btn-ghost { background: transparent; border:1px solid rgba(255,255,255,0.06); color:#fff; padding:8px 10px; border-radius:8px; cursor:pointer; }
+.btn-primary { background: linear-gradient(90deg,#60a5fa,#3b82f6); border:0; color:#fff; padding:8px 12px; border-radius:8px; cursor:pointer; }
 
-/* Make sure config button visible on top */
-#weather-config-btn { z-index: 9999; }
+/* Ensure gear visible */
+#weather-config-btn { z-index: 130; }
 
-/* Basic responsive sizing */
+/* small responsive */
 @media (max-width:420px) {
+  .config-panel.open { width: 92vw; }
   .weather-widget { padding: 14px; }
 }
