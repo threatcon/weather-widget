@@ -1,15 +1,12 @@
-// script.js — Drop-in replacement (full file).
-// - Throttles/minimizes DOM writes to avoid flicker
-// - Uses Open-Meteo timezone (data.timezone) or utc_offset_seconds to align daily.time
-// - Includes console.debug logs to help diagnose date alignment
+// script.js — Full drop-in widget script with robust location detection.
+// - Preference order: localStorage saved location -> navigator.geolocation -> multiple IP providers
+// - Timezone-aware forecast alignment and throttled DOM writes to avoid flicker
+// - Replace your existing script.js with this file (keeps same HTML ID expectations)
 //
-// Expected HTML IDs:
-// dateTime, temperature, weatherIcon, location, precipitationChance, humidity, windSpeed,
-// sunriseTime, sunsetTime, dayLength, forecastContainer
-//
-// Replace your current script.js with this file.
+// Expected HTML IDs: dateTime, temperature, weatherIcon, location, precipitationChance, humidity,
+// windSpeed, sunriseTime, sunsetTime, dayLength, forecastContainer
 
-(function () {
+(() => {
   /* ---------- Small DOM helpers ---------- */
   function setTextIfChanged(el, value) {
     if (!el) return;
@@ -51,7 +48,7 @@
   setInterval(updateDateTimeThrottled, 1000);
   updateDateTimeThrottled();
 
-  /* ---------- Fetch with simple retries ---------- */
+  /* ---------- Fetch helper with retries ---------- */
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   async function fetchWithRetries(url, opts = {}, tries = 3, backoff = 300) {
     for (let i = 0; i < tries; i++) {
@@ -80,7 +77,7 @@
     return '⛅';
   }
 
-  /* ---------- Timezone-aware helpers ---------- */
+  /* ---------- Timezone helpers ---------- */
   function yyyyMmDdInZone(date, timeZone) {
     try {
       const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
@@ -104,32 +101,38 @@
     }
   }
 
+  function formatTimeISOToLocal(iso, tz) {
+    try {
+      if (tz) return new Intl.DateTimeFormat(undefined, { timeZone: tz, hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
+      return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    } catch (e) {
+      return iso;
+    }
+  }
+
   /* ---------- Forecast builder (timezone aware, robust) ---------- */
   function buildForecastCards(container, dailyData, apiTz, utcOffsetSeconds) {
     if (!container || !dailyData || !Array.isArray(dailyData.time)) return;
 
-    // Debug output for inspection
-    console.debug('DEBUG daily.time sample:', dailyData.time.slice(0, 8));
-    console.debug('DEBUG api timezone:', apiTz, 'utc_offset_seconds:', utcOffsetSeconds);
+    console.debug('daily.time sample:', dailyData.time.slice(0, 8), 'apiTz:', apiTz, 'utc_offset_seconds:', utcOffsetSeconds);
 
     const times = dailyData.time;
     const now = new Date();
 
-    // Compute today string in API timezone or via utc offset; fallback to browser local
+    // Compute today in API timezone (or fallback)
     let todayStr = null;
     if (apiTz) todayStr = yyyyMmDdInZone(now, apiTz);
-    if (!todayStr && (typeof utcOffsetSeconds === 'number')) todayStr = yyyyMmDdWithOffset(now, utcOffsetSeconds);
+    if (!todayStr && typeof utcOffsetSeconds === 'number') todayStr = yyyyMmDdWithOffset(now, utcOffsetSeconds);
     if (!todayStr) {
       const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0'), d = String(now.getDate()).padStart(2, '0');
       todayStr = `${y}-${m}-${d}`;
     }
 
-    // Determine start index matching todayStr
+    // find index where daily.time equals todayStr
     let startIdx = times.findIndex(t => t === todayStr);
 
-    // Heuristics for common shifts
+    // heuristic: if array starts with yesterday and second is today, shift by 1
     if (startIdx === -1 && times.length >= 2) {
-      // If first is yesterday and second is today, shift by 1
       const yesterday = new Date(now);
       yesterday.setDate(now.getDate() - 1);
       let yStr = null;
@@ -142,18 +145,15 @@
       if (times[0] === yStr && times[1] === todayStr) startIdx = 1;
     }
 
-    // Another attempt: convert each times[i] into the API timezone local date and compare
+    // try candidate conversion match
     if (startIdx === -1) {
       for (let i = 0; i < times.length; i++) {
         const candidateIso = `${times[i]}T00:00:00`;
         try {
           let candidateStr = null;
           if (apiTz) candidateStr = yyyyMmDdInZone(new Date(candidateIso), apiTz);
-          else if (typeof utcOffsetSeconds === 'number') {
-            // compute candidate date with offset relative to UTC midnight
-            const dt = new Date(candidateIso);
-            candidateStr = yyyyMmDdWithOffset(dt, utcOffsetSeconds);
-          } else {
+          else if (typeof utcOffsetSeconds === 'number') candidateStr = yyyyMmDdWithOffset(new Date(candidateIso), utcOffsetSeconds);
+          else {
             const dt = new Date(candidateIso);
             const yy = dt.getFullYear(), mm = String(dt.getMonth() + 1).padStart(2,'0'), dd = String(dt.getDate()).padStart(2,'0');
             candidateStr = `${yy}-${mm}-${dd}`;
@@ -163,10 +163,9 @@
       }
     }
 
-    // Final fallback
     if (startIdx === -1) startIdx = 0;
 
-    console.debug('DEBUG computed todayStr:', todayStr, '=> startIdx:', startIdx);
+    console.debug('computed todayStr:', todayStr, '=> startIdx:', startIdx);
 
     const needRebuild = !container._built || container._startIdx !== startIdx || container._len !== times.length;
     if (!needRebuild) return;
@@ -175,20 +174,18 @@
     container._startIdx = startIdx;
     container._len = times.length;
 
-    // Clear container
     while (container.firstChild) container.removeChild(container.firstChild);
 
     const maxCards = 4;
     for (let i = 0; i < maxCards; i++) {
       const idx = startIdx + i;
       if (!times[idx]) break;
-      const dayIso = times[idx]; // YYYY-MM-DD
+      const dayIso = times[idx];
       const dObj = new Date(`${dayIso}T00:00:00`);
       const isToday = (idx === startIdx);
       const label = isToday
         ? 'Today'
-        : (apiTz ? new Intl.DateTimeFormat(undefined, { weekday: 'short', timeZone: apiTz }).format(dObj)
-                 : new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(dObj));
+        : (apiTz ? new Intl.DateTimeFormat(undefined, { weekday: 'short', timeZone: apiTz }).format(dObj) : new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(dObj));
 
       const hi = (dailyData.temperature_2m_max && dailyData.temperature_2m_max[idx] != null) ? Math.round(dailyData.temperature_2m_max[idx]) : '—';
       const lo = (dailyData.temperature_2m_min && dailyData.temperature_2m_min[idx] != null) ? Math.round(dailyData.temperature_2m_min[idx]) : '—';
@@ -213,13 +210,96 @@
     }
   }
 
-  /* ---------- Render UI from API response ---------- */
+  /* ---------- Location detection (robust) ---------- */
+  async function detectLocation() {
+    // 1) saved in localStorage
+    try {
+      const raw = localStorage.getItem('weather_widget_location');
+      if (raw) {
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj.lat === 'number' && typeof obj.lon === 'number') {
+          return { lat: obj.lat, lon: obj.lon, label: obj.label || `${obj.lat}, ${obj.lon}`, timezone: obj.timezone || null };
+        }
+      }
+    } catch (e) { /* ignore */ }
+
+    // 2) navigator.geolocation (permission-based)
+    const tryNavigator = () => new Promise(resolve => {
+      if (!('geolocation' in navigator)) return resolve(null);
+      let done = false;
+      const onSuccess = pos => { if (done) return; done = true; resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, label: null, timezone: null }); };
+      const onError = () => { if (done) return; done = true; resolve(null); };
+      navigator.geolocation.getCurrentPosition(onSuccess, onError, { timeout: 7000, maximumAge: 60000 });
+      setTimeout(() => { if (!done) { done = true; resolve(null); } }, 9000);
+    });
+
+    try {
+      const nav = await tryNavigator();
+      if (nav) return nav;
+    } catch (e) { /* ignore */ }
+
+    // 3) IP providers (try a list)
+    const providers = [
+      {
+        url: 'https://ipapi.co/json/',
+        mapper: j => (j && (j.latitude || j.lat) && (j.longitude || j.lon)) ? { lat: Number(j.latitude || j.lat), lon: Number(j.longitude || j.lon), label: [j.city, j.region, j.country_name].filter(Boolean).join(', '), timezone: j.timezone || null } : null
+      },
+      {
+        url: 'https://ipwho.is/',
+        mapper: j => (j && j.success !== false && j.latitude && j.longitude) ? { lat: Number(j.latitude), lon: Number(j.longitude), label: [j.city, j.region, j.country].filter(Boolean).join(', '), timezone: j.timezone || null } : null
+      },
+      {
+        url: 'https://ipinfo.io/json',
+        mapper: j => (j && j.loc) ? (() => { const [lat, lon] = String(j.loc).split(',').map(Number); return { lat, lon, label: [j.city, j.region, j.country].filter(Boolean).join(', '), timezone: j.timezone || null }; })() : null
+      },
+      {
+        url: 'https://geoip.vuiz.net/geoip',
+        mapper: j => (j && j.lat && j.lon) ? { lat: Number(j.lat), lon: Number(j.lon), label: [j.city, j.region, j.country].filter(Boolean).join(', '), timezone: j.timezone || null } : null
+      }
+    ];
+
+    for (const p of providers) {
+      try {
+        const json = await fetchWithRetries(p.url, { headers: { 'Accept': 'application/json' } }, 2, 300).catch(() => null);
+        if (!json) continue;
+        const mapped = p.mapper(json);
+        if (mapped) {
+          console.debug('detectLocation provider success:', p.url, mapped);
+          return mapped;
+        }
+      } catch (e) {
+        // ignore provider error
+      }
+    }
+
+    // 4) fallback hard-coded
+    return { lat: 40.7128, lon: -74.0060, label: 'New York, USA', timezone: null };
+  }
+
+  /* ---------- Weather fetch & render ---------- */
+  const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1/forecast';
+
+  async function fetchWeather(lat, lon) {
+    const params = new URLSearchParams({
+      latitude: lat,
+      longitude: lon,
+      hourly: 'temperature_2m,precipitation_probability,relativehumidity_2m,windspeed_10m,weathercode',
+      daily: 'weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset',
+      current_weather: 'true',
+      timezone: 'auto',
+      temperature_unit: 'fahrenheit',
+      windspeed_unit: 'mph'
+    });
+    const url = `${OPEN_METEO_BASE}?${params.toString()}`;
+    return await fetchWithRetries(url, {}, 3, 400);
+  }
+
   function renderUI(data, locationLabel) {
     if (!data) return;
     try {
       const current = data.current_weather ?? null;
 
-      // find nearest hourly index
+      // hourly index nearest to now
       let hourlyIdx = 0;
       if (Array.isArray(data.hourly?.time) && data.hourly.time.length) {
         const now = new Date();
@@ -262,9 +342,8 @@
         }
       });
 
-      // Build forecast cards (timezone-aware)
+      // build forecast cards (timezone-aware)
       if (EL.forecastContainer && data.daily) {
-        // pass both timezone and utc offset if present
         const utcOffset = (typeof data.utc_offset_seconds === 'number') ? data.utc_offset_seconds
                         : (typeof data.utc_offset_seconds === 'string' && data.utc_offset_seconds ? Number(data.utc_offset_seconds) : null);
         buildForecastCards(EL.forecastContainer, data.daily, data.timezone, utcOffset);
@@ -274,71 +353,40 @@
     }
   }
 
-  function formatTimeISOToLocal(iso, tz) {
-    try {
-      if (tz) return new Intl.DateTimeFormat(undefined, { timeZone: tz, hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
-      return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    } catch (e) {
-      return iso;
-    }
-  }
-
-  /* ---------- Simple location detection + fetch ---------- */
-  function getSavedLocation() {
-    try {
-      const raw = localStorage.getItem('weather_widget_location');
-      if (!raw) return null;
-      return JSON.parse(raw);
-    } catch (e) { return null; }
-  }
-  async function detectLocationFallback() {
-    const saved = getSavedLocation();
-    if (saved && typeof saved.lat === 'number' && typeof saved.lon === 'number') return saved;
-    // fallback to New York
-    return { lat: 40.7128, lon: -74.0060, label: 'New York, USA' };
-  }
-
-  const OPEN_METEO_BASE = 'https://api.open-meteo.com/v1/forecast';
-  async function fetchWeather(lat, lon) {
-    const params = new URLSearchParams({
-      latitude: lat,
-      longitude: lon,
-      hourly: 'temperature_2m,precipitation_probability,relativehumidity_2m,windspeed_10m,weathercode',
-      daily: 'weathercode,temperature_2m_max,temperature_2m_min,sunrise,sunset',
-      current_weather: 'true',
-      timezone: 'auto',
-      temperature_unit: 'fahrenheit',
-      windspeed_unit: 'mph'
-    });
-    const url = `${OPEN_METEO_BASE}?${params.toString()}`;
-    return await fetchWithRetries(url, {}, 3, 400);
-  }
-
-  /* ---------- Init ---------- */
+  /* ---------- Initialization flow ---------- */
   async function initWidget() {
     try {
-      const loc = await detectLocationFallback();
+      const loc = await detectLocation();
       setTextIfChanged(EL.location, loc.label || `${loc.lat.toFixed(3)}, ${loc.lon.toFixed(3)}`);
 
       const data = await fetchWeather(loc.lat, loc.lon).catch(e => { console.error('fetchWeather error', e); return null; });
       if (data) renderUI(data, loc.label);
 
-      // refresh once per hour
+      // re-run when user sets a saved location or config events in your app may fire
+      window.addEventListener('weather:config-saved', async (e) => {
+        const d = e.detail;
+        if (!d) return;
+        const used = { lat: d.lat, lon: d.lon, label: d.label || `${d.lat}, ${d.lon}` };
+        setTextIfChanged(EL.location, used.label);
+        const fresh = await fetchWeather(used.lat, used.lon).catch(() => null);
+        if (fresh) renderUI(fresh, used.label);
+      });
+
+      // periodic refresh (hourly)
       setInterval(async () => {
-        const d = await fetchWeather(loc.lat, loc.lon).catch(e => { console.error(e); return null; });
-        if (d) renderUI(d, loc.label);
+        try {
+          const d = await fetchWeather(loc.lat, loc.lon);
+          if (d) renderUI(d, loc.label);
+        } catch (e) { console.error('periodic refresh error', e); }
       }, 60 * 60 * 1000);
-    } catch (e) {
-      console.error('initWidget error', e);
+    } catch (err) {
+      console.error('initWidget error', err);
     }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => initWidget().catch(e => console.error(e)));
-  } else {
-    initWidget().catch(e => console.error(e));
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initWidget);
+  else initWidget();
 
-  // expose helpers for debugging in console
-  window.__weatherWidgetDebug = { buildForecastCards, renderUI };
+  // expose internals for debugging
+  window.__weatherWidget = { detectLocation, buildForecastCards, renderUI };
 })();
