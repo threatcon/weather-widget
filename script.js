@@ -25,7 +25,7 @@ async function fetchWithRetries(url, opts = {}, tries = 3, backoff = 400) {
   }
 }
 
-/* ---------- small utilities ---------- */
+/* ---------- utilities ---------- */
 function setText(el, text) { if (el) el.textContent = text; }
 function weatherCodeToIcon(code, isDay) {
   if ([0].includes(code)) return isDay ? '☀️' : '🌙';
@@ -104,35 +104,59 @@ function getBrowserGeolocation(timeoutMs = 7000) {
     setTimeout(() => { if (!done) { done = true; resolve(null); } }, timeoutMs + 300);
   });
 }
+
+/* Slide panel wiring (replaces previous modal init) */
 function initLocationConfigUI() {
   const btn = document.getElementById('weather-config-btn');
-  const modal = document.getElementById('weather-config-modal');
+  const panel = document.getElementById('weather-config-panel');
+  const closeBtn = document.getElementById('weather-config-close');
   const input = document.getElementById('weather-config-input');
   const saveBtn = document.getElementById('weather-config-save');
   const clearBtn = document.getElementById('weather-config-clear');
   const geoBtn = document.getElementById('weather-config-geo');
   const msg = document.getElementById('weather-config-msg');
-  if (!btn || !modal || !input || !saveBtn || !clearBtn || !geoBtn || !msg) return;
-  function showModal() {
-    modal.classList.add('open');
-    modal.setAttribute('aria-hidden', 'false');
+
+  if (!btn || !panel || !closeBtn || !input || !saveBtn || !clearBtn || !geoBtn || !msg) return;
+
+  function openPanel() {
+    panel.classList.add('open');
+    panel.setAttribute('aria-hidden', 'false');
     const saved = getSavedLocation();
     input.value = saved && saved.label ? saved.label : '';
     msg.textContent = saved ? `Using saved: ${saved.label || `${saved.lat.toFixed(3)},${saved.lon.toFixed(3)}`}` : '';
+    setTimeout(() => input.focus(), 190);
   }
-  function hideModal() {
-    modal.classList.remove('open');
-    modal.setAttribute('aria-hidden', 'true');
+  function closePanel() {
+    panel.classList.remove('open');
+    panel.setAttribute('aria-hidden', 'true');
   }
-  btn.addEventListener('click', (e) => { e.stopPropagation(); showModal(); input.focus(); });
-  modal.addEventListener('click', (ev) => { if (ev.target === modal) hideModal(); });
-  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && modal.classList.contains('open')) hideModal(); });
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (panel.classList.contains('open')) closePanel();
+    else openPanel();
+  });
+
+  closeBtn.addEventListener('click', (e) => { e.stopPropagation(); closePanel(); });
+
+  panel.addEventListener('click', (ev) => {
+    if (ev.target === panel) closePanel();
+  });
+
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape' && panel.classList.contains('open')) closePanel();
+  });
+
   saveBtn.addEventListener('click', async () => {
+    const place = input.value.trim();
+    if (!place) {
+      msg.textContent = 'Please enter a place.';
+      return;
+    }
     msg.textContent = 'Resolving location…';
     saveBtn.disabled = true;
     try {
-      const place = input.value.trim();
-      let resolved = await geocodePlace(place);
+      const resolved = await geocodePlace(place);
       if (!resolved) {
         msg.textContent = 'Place not found. Try a nearby city or ZIP.';
         return;
@@ -140,28 +164,35 @@ function initLocationConfigUI() {
       setSavedLocation({ lat: resolved.lat, lon: resolved.lon, label: resolved.label || place });
       msg.textContent = `Saved: ${resolved.label || place}`;
       window.dispatchEvent(new CustomEvent('weather:config-saved', { detail: { lat: resolved.lat, lon: resolved.lon, label: resolved.label } }));
-      setTimeout(() => hideModal(), 650);
+      setTimeout(closePanel, 450);
     } finally {
       saveBtn.disabled = false;
     }
   });
+
   clearBtn.addEventListener('click', () => {
     clearSavedLocation();
-    msg.textContent = 'Cleared saved location; widget will use IP/geolocation next time.';
+    msg.textContent = 'Cleared saved location; widget will use IP/geolocation next refresh.';
     window.dispatchEvent(new CustomEvent('weather:config-cleared'));
-    setTimeout(() => hideModal(), 650);
+    setTimeout(closePanel, 450);
   });
+
   geoBtn.addEventListener('click', async () => {
     msg.textContent = 'Requesting browser location…';
     geoBtn.disabled = true;
     try {
       const g = await getBrowserGeolocation();
-      if (!g) { msg.textContent = 'Browser location unavailable or denied.'; return; }
+      if (!g) {
+        msg.textContent = 'Browser location unavailable or denied.';
+        return;
+      }
       setSavedLocation({ lat: g.lat, lon: g.lon, label: g.label || 'Device location' });
       msg.textContent = 'Saved device location.';
       window.dispatchEvent(new CustomEvent('weather:config-saved', { detail: { lat: g.lat, lon: g.lon, label: g.label } }));
-      setTimeout(() => hideModal(), 650);
-    } finally { geoBtn.disabled = false; }
+      setTimeout(closePanel, 450);
+    } finally {
+      geoBtn.disabled = false;
+    }
   });
 }
 if (document.readyState === 'loading') {
