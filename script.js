@@ -1,21 +1,12 @@
 // script.js — ES module (weather + config + boot)
 import { initClouds } from './clouds.js';
 
-/* ---------- small helpers ---------- */
+/* ---------- helpers ---------- */
 const SELECTORS = {
-  dateTime: 'dateTime',
-  location: 'location',
-  temperature: 'temperature',
-  weatherIcon: 'weatherIcon',
-  precipitationChance: 'precipitationChance',
-  humidity: 'humidity',
-  windSpeed: 'windSpeed',
-  sunriseTime: 'sunriseTime',
-  sunsetTime: 'sunsetTime',
-  dayLength: 'dayLength',
-  forecastContainer: 'forecastContainer',
-  cloudContainer: 'cloud-container',
-  cloudTooltip: 'cloud-tooltip'
+  dateTime: 'dateTime', location: 'location', temperature: 'temperature', weatherIcon: 'weatherIcon',
+  precipitationChance: 'precipitationChance', humidity: 'humidity', windSpeed: 'windSpeed',
+  sunriseTime: 'sunriseTime', sunsetTime: 'sunsetTime', dayLength: 'dayLength',
+  forecastContainer: 'forecastContainer', cloudContainer: 'cloud-container', cloudTooltip: 'cloud-tooltip'
 };
 const EL = Object.fromEntries(Object.entries(SELECTORS).map(([k,v]) => [k, document.getElementById(v)]));
 
@@ -34,7 +25,7 @@ async function fetchWithRetries(url, opts = {}, tries = 3, backoff = 400) {
   }
 }
 
-/* ---------- utilities ---------- */
+/* ---------- small utilities ---------- */
 function setText(el, text) { if (el) el.textContent = text; }
 function weatherCodeToIcon(code, isDay) {
   if ([0].includes(code)) return isDay ? '☀️' : '🌙';
@@ -214,7 +205,6 @@ function tryNavigatorGeolocation(timeoutMs = 7000) {
   });
 }
 async function detectLocation() {
-  // prefer saved location
   const saved = getSavedLocation();
   if (saved) return saved;
   const ip = await tryIpProviders().catch(err => { console.warn('tryIpProviders threw', err); return null; });
@@ -292,13 +282,11 @@ async function renderUI(data, locationLabel) {
       setText(EL.dayLength, formatDurationSeconds(Math.max(0, Math.round((new Date(sunset) - new Date(sunrise))/1000))));
     }
 
-    // forecast
     const fc = EL.forecastContainer;
     if (!fc) return;
     while (fc.firstChild) fc.removeChild(fc.firstChild);
     if (data.daily?.time) {
-      const days = data.daily.time;
-      const max = Math.min(days.length, 4);
+      const max = Math.min(data.daily.time.length, 4);
       for (let i = 0; i < max; i++) {
         const dIso = data.daily.time[i];
         const d = new Date(dIso);
@@ -307,7 +295,7 @@ async function renderUI(data, locationLabel) {
         const lo = Math.round(data.daily.temperature_2m_min[i]);
         const codeDay = data.daily.weathercode[i];
         const card = document.createElement('div');
-        card.className = 'forecast-day bg-white/5 backdrop-blur-sm rounded-xl p-3 w-20 text-center border border-white/10 shadow-sm hover:bg-white/10 transition-all duration-200 cursor-pointer transform hover:-translate-y-1 animate-fadeInUp';
+        card.className = 'forecast-day bg-white/5 backdrop-blur-sm rounded-xl p-3 w-20 text-center border border-white/10 shadow-sm hover:bg-white/10 transition-all duration-200 cursor-pointer transform hover:-translate-y-1';
         card.innerHTML = `<div class="day-name text-xs font-medium mb-1 opacity-80">${label}</div>
                           <div class="forecast-icon text-2xl my-1 drop-shadow-md">${weatherCodeToIcon(codeDay,true)}</div>
                           <div class="high-temp text-sm font-semibold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300">${hi}°</div>
@@ -328,51 +316,33 @@ async function renderUI(data, locationLabel) {
 
 /* ---------- init weather + clouds ---------- */
 async function initAll() {
-  // setup clouds
   try {
     const cloudContainer = EL.cloudContainer;
     if (cloudContainer) {
-      try {
-        initClouds(cloudContainer);
-      } catch (e) {
-        try {
-          const mod = await import('./clouds.js');
-          if (mod && mod.initClouds) mod.initClouds(cloudContainer);
-        } catch (err) {
-          console.warn('clouds dynamic import failed', err);
-        }
+      try { initClouds(cloudContainer); } catch (e) {
+        try { const mod = await import('./clouds.js'); if (mod && mod.initClouds) mod.initClouds(cloudContainer); } catch (err) { console.warn('clouds dynamic import failed', err); }
       }
     }
   } catch (e) { console.warn('cloud init error', e); }
 
-  // detect location (prefers saved)
   setText(EL.location, 'Detecting location...');
   const loc = await detectLocation();
-  if (!loc) {
-    setText(EL.location, 'Location unknown');
-  } else {
-    const label = loc.label || `${loc.lat.toFixed(3)}, ${loc.lon.toFixed(3)}`;
-    setText(EL.location, label);
-  }
+  if (!loc) setText(EL.location, 'Location unknown');
+  else setText(EL.location, loc.label || `${loc.lat.toFixed(3)}, ${loc.lon.toFixed(3)}`);
 
-  // refresh function
   async function refresh(used) {
     try {
       const data = await fetchWeatherFor(used.lat, used.lon).catch(e => { console.error('fetchWeatherFor failed', e); return null; });
       if (!data) { setText(EL.location, 'Weather unavailable'); return; }
       await renderUI(data, used.label);
-    } catch (err) {
-      console.error('refresh error', err);
-    }
+    } catch (err) { console.error('refresh error', err); }
   }
 
   const used = loc || { lat: 40.7128, lon: -74.0060, label: 'New York, USA' };
   await refresh(used);
 
-  // listen for config save/clear to refresh immediately
   window.addEventListener('weather:config-saved', (e) => {
-    const d = e.detail;
-    if (!d) return;
+    const d = e.detail; if (!d) return;
     setText(EL.location, d.label || `${d.lat.toFixed(3)},${d.lon.toFixed(3)}`);
     fetchWeatherFor(d.lat, d.lon).then(data => { if (data) renderUI(data, d.label); }).catch(console.error);
   });
@@ -385,7 +355,6 @@ async function initAll() {
   setInterval(() => { refresh(used).catch(e => console.error('periodic weather error', e)); }, 60 * 60 * 1000);
 }
 
-// DOM ready
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => initAll().catch(e => console.error(e)));
 } else {
