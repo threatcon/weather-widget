@@ -1,4 +1,4 @@
-// script.js — ES module (weather + boot)
+// script.js — ES module (weather + config + boot)
 import { initClouds } from './clouds.js';
 
 /* ---------- small helpers ---------- */
@@ -61,14 +61,130 @@ function updateDateTime() {
 updateDateTime();
 setInterval(updateDateTime, 60_000);
 
-/* ---------- location detection ---------- */
-/* ---------- robust location detection (replace existing) ---------- */
+/* ===== Location override UI + helpers ===== */
+const LOCATION_KEY = 'weather_widget_location_v1';
+function getSavedLocation() {
+  try {
+    const raw = localStorage.getItem(LOCATION_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data && typeof data.lat === 'number' && typeof data.lon === 'number') return data;
+    return null;
+  } catch (e) { console.warn('getSavedLocation error', e); return null; }
+}
+function setSavedLocation(obj) {
+  try {
+    localStorage.setItem(LOCATION_KEY, JSON.stringify(obj));
+    window.dispatchEvent(new CustomEvent('weather:location-changed', { detail: obj }));
+    return true;
+  } catch (e) { console.warn('setSavedLocation error', e); return false; }
+}
+function clearSavedLocation() {
+  try {
+    localStorage.removeItem(LOCATION_KEY);
+    window.dispatchEvent(new CustomEvent('weather:location-cleared'));
+    return true;
+  } catch (e) { console.warn('clearSavedLocation error', e); return false; }
+}
+async function geocodePlace(place) {
+  if (!place || !place.trim()) return null;
+  const q = encodeURIComponent(place.trim());
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${q}&limit=4&accept-language=en`;
+  try {
+    const json = await fetchWithRetries(url, { headers: { 'Accept': 'application/json' } }, 2, 400);
+    if (!Array.isArray(json) || json.length === 0) return null;
+    let pick = json[0];
+    for (const r of json) {
+      if (r.type && ['city','town','village','county','administrative','state'].includes(r.type)) { pick = r; break; }
+    }
+    return { lat: Number(pick.lat), lon: Number(pick.lon), label: pick.display_name || place };
+  } catch (err) {
+    console.warn('geocodePlace failed', err);
+    return null;
+  }
+}
+function getBrowserGeolocation(timeoutMs = 7000) {
+  return new Promise((resolve) => {
+    if (!('geolocation' in navigator)) return resolve(null);
+    let done = false;
+    const onSuccess = (pos) => { if (done) return; done = true; resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, label: null }); };
+    const onErr = (err) => { if (done) return; done = true; console.warn('geolocation error', err); resolve(null); };
+    navigator.geolocation.getCurrentPosition(onSuccess, onErr, { timeout: timeoutMs, maximumAge: 60000 });
+    setTimeout(() => { if (!done) { done = true; resolve(null); } }, timeoutMs + 300);
+  });
+}
+function initLocationConfigUI() {
+  const btn = document.getElementById('weather-config-btn');
+  const modal = document.getElementById('weather-config-modal');
+  const input = document.getElementById('weather-config-input');
+  const saveBtn = document.getElementById('weather-config-save');
+  const clearBtn = document.getElementById('weather-config-clear');
+  const geoBtn = document.getElementById('weather-config-geo');
+  const msg = document.getElementById('weather-config-msg');
+  if (!btn || !modal || !input || !saveBtn || !clearBtn || !geoBtn || !msg) return;
+  function showModal() {
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    const saved = getSavedLocation();
+    input.value = saved && saved.label ? saved.label : '';
+    msg.textContent = saved ? `Using saved: ${saved.label || `${saved.lat.toFixed(3)},${saved.lon.toFixed(3)}`}` : '';
+  }
+  function hideModal() {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+  }
+  btn.addEventListener('click', (e) => { e.stopPropagation(); showModal(); input.focus(); });
+  modal.addEventListener('click', (ev) => { if (ev.target === modal) hideModal(); });
+  document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && modal.classList.contains('open')) hideModal(); });
+  saveBtn.addEventListener('click', async () => {
+    msg.textContent = 'Resolving location…';
+    saveBtn.disabled = true;
+    try {
+      const place = input.value.trim();
+      let resolved = await geocodePlace(place);
+      if (!resolved) {
+        msg.textContent = 'Place not found. Try a nearby city or ZIP.';
+        return;
+      }
+      setSavedLocation({ lat: resolved.lat, lon: resolved.lon, label: resolved.label || place });
+      msg.textContent = `Saved: ${resolved.label || place}`;
+      window.dispatchEvent(new CustomEvent('weather:config-saved', { detail: { lat: resolved.lat, lon: resolved.lon, label: resolved.label } }));
+      setTimeout(() => hideModal(), 650);
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+  clearBtn.addEventListener('click', () => {
+    clearSavedLocation();
+    msg.textContent = 'Cleared saved location; widget will use IP/geolocation next time.';
+    window.dispatchEvent(new CustomEvent('weather:config-cleared'));
+    setTimeout(() => hideModal(), 650);
+  });
+  geoBtn.addEventListener('click', async () => {
+    msg.textContent = 'Requesting browser location…';
+    geoBtn.disabled = true;
+    try {
+      const g = await getBrowserGeolocation();
+      if (!g) { msg.textContent = 'Browser location unavailable or denied.'; return; }
+      setSavedLocation({ lat: g.lat, lon: g.lon, label: g.label || 'Device location' });
+      msg.textContent = 'Saved device location.';
+      window.dispatchEvent(new CustomEvent('weather:config-saved', { detail: { lat: g.lat, lon: g.lon, label: g.label } }));
+      setTimeout(() => hideModal(), 650);
+    } finally { geoBtn.disabled = false; }
+  });
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initLocationConfigUI);
+} else {
+  initLocationConfigUI();
+}
+
+/* ---------- location detection (IP providers + navigator fallback) ---------- */
 const IP_PROVIDERS = [
   { url: 'https://freegeoip.app/json/', mapper: j => j && j.latitude && j.longitude ? { lat: Number(j.latitude), lon: Number(j.longitude), label: [j.city, j.region_name || j.region, j.country_name].filter(Boolean).join(', ') } : null },
   { url: 'https://ipapi.co/json/', mapper: j => j && (j.latitude || j.lat) && (j.longitude || j.lon) ? { lat: Number(j.latitude || j.lat), lon: Number(j.longitude || j.lon), label: [j.city, j.region, j.country_name].filter(Boolean).join(', ') } : null },
   { url: 'https://ipwho.is/', mapper: j => j && j.success !== false && j.latitude && j.longitude ? { lat: Number(j.latitude), lon: Number(j.longitude), label: [j.city, j.region, j.country].filter(Boolean).join(', ') } : null }
 ];
-
 async function tryIpProviders() {
   for (const p of IP_PROVIDERS) {
     try {
@@ -87,7 +203,6 @@ async function tryIpProviders() {
   }
   return null;
 }
-
 function tryNavigatorGeolocation(timeoutMs = 7000) {
   return new Promise((resolve) => {
     if (!('geolocation' in navigator)) return resolve(null);
@@ -98,17 +213,14 @@ function tryNavigatorGeolocation(timeoutMs = 7000) {
     setTimeout(() => { if (!done) { done = true; resolve(null); } }, timeoutMs + 300);
   });
 }
-
 async function detectLocation() {
-  // 1) fast IP provider attempts (CORS-friendly)
+  // prefer saved location
+  const saved = getSavedLocation();
+  if (saved) return saved;
   const ip = await tryIpProviders().catch(err => { console.warn('tryIpProviders threw', err); return null; });
   if (ip) return ip;
-
-  // 2) try navigator geolocation (may prompt the user)
   const geo = await tryNavigatorGeolocation().catch(() => null);
   if (geo) return geo;
-
-  // 3) final fallback default
   console.warn('All location methods failed; falling back to defaults');
   return { lat: 40.7128, lon: -74.0060, label: 'New York, USA' };
 }
@@ -216,15 +328,13 @@ async function renderUI(data, locationLabel) {
 
 /* ---------- init weather + clouds ---------- */
 async function initAll() {
-  // setup clouds (safe)
+  // setup clouds
   try {
     const cloudContainer = EL.cloudContainer;
     if (cloudContainer) {
       try {
-        // prefer direct import call
         initClouds(cloudContainer);
       } catch (e) {
-        // fallback dynamic import
         try {
           const mod = await import('./clouds.js');
           if (mod && mod.initClouds) mod.initClouds(cloudContainer);
@@ -235,7 +345,7 @@ async function initAll() {
     }
   } catch (e) { console.warn('cloud init error', e); }
 
-  // detect location robustly
+  // detect location (prefers saved)
   setText(EL.location, 'Detecting location...');
   const loc = await detectLocation();
   if (!loc) {
@@ -245,10 +355,9 @@ async function initAll() {
     setText(EL.location, label);
   }
 
-  // fetch weather once then hourly
-  async function refresh() {
+  // refresh function
+  async function refresh(used) {
     try {
-      const used = loc || { lat: 40.7128, lon: -74.0060, label: 'New York, USA' };
       const data = await fetchWeatherFor(used.lat, used.lon).catch(e => { console.error('fetchWeatherFor failed', e); return null; });
       if (!data) { setText(EL.location, 'Weather unavailable'); return; }
       await renderUI(data, used.label);
@@ -257,8 +366,23 @@ async function initAll() {
     }
   }
 
-  await refresh();
-  setInterval(() => { refresh().catch(e => console.error('periodic weather error', e)); }, 60 * 60 * 1000);
+  const used = loc || { lat: 40.7128, lon: -74.0060, label: 'New York, USA' };
+  await refresh(used);
+
+  // listen for config save/clear to refresh immediately
+  window.addEventListener('weather:config-saved', (e) => {
+    const d = e.detail;
+    if (!d) return;
+    setText(EL.location, d.label || `${d.lat.toFixed(3)},${d.lon.toFixed(3)}`);
+    fetchWeatherFor(d.lat, d.lon).then(data => { if (data) renderUI(data, d.label); }).catch(console.error);
+  });
+  window.addEventListener('weather:config-cleared', async () => {
+    const newLoc = await detectLocation();
+    setText(EL.location, newLoc.label || `${newLoc.lat.toFixed(3)},${newLoc.lon.toFixed(3)}`);
+    fetchWeatherFor(newLoc.lat, newLoc.lon).then(data => { if (data) renderUI(data, newLoc.label); }).catch(console.error);
+  });
+
+  setInterval(() => { refresh(used).catch(e => console.error('periodic weather error', e)); }, 60 * 60 * 1000);
 }
 
 // DOM ready
