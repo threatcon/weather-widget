@@ -5,45 +5,68 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Weather Widget</title>
 
-  <!-- Tailwind CDN is optional; keep if your CSS uses Tailwind classes -->
+  <!-- Optional: Tailwind CDN if you used tailwind classes in the CSS/HTML -->
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
-  <!-- Your CSS -->
   <link rel="stylesheet" href="./styles.css">
 </head>
-<body>
-  <!-- copy the widget HTML you posted (cloud container must include cloudSurprise overlay) -->
-  <div class="body-wrapper min-h-screen flex justify-center items-center p-4">
+<body class="bg-gray-900 text-white" style="font-family:Outfit,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;">
+  <div class="body-wrapper min-h-screen flex justify-center items-center p-6">
     <div class="weather-widget-container relative w-full max-w-sm sm:max-w-md">
       <div class="weather-widget relative text-white bg-gradient-to-br from-gray-900/90 via-neutral-900/90 to-black/100 backdrop-blur-lg shadow-2xl rounded-3xl p-6 overflow-hidden border border-white/6">
+        <!-- Config button (opens modal) -->
+        <button id="weather-config-btn" aria-label="Configure location" title="Set location"
+          style="position:absolute;top:12px;left:12px;z-index:70;background:rgba(255,255,255,0.04);border:0;padding:6px 8px;border-radius:8px;color:#fff;backdrop-filter:blur(6px);cursor:pointer;">
+          ⚙
+        </button>
+
+        <!-- Config modal -->
+        <div id="weather-config-modal" role="dialog" aria-modal="true" aria-hidden="true"
+          style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:120;pointer-events:none;opacity:0;transition:opacity .18s ease">
+          <div style="pointer-events:auto;width:320px;max-width:92vw;background:linear-gradient(180deg,rgba(6,6,6,0.96),rgba(18,18,18,0.98));border-radius:12px;padding:16px;border:1px solid rgba(255,255,255,0.06);box-shadow:0 12px 40px rgba(0,0,0,0.6);">
+            <h3 style="margin:0 0 8px;font-size:16px;color:#edf2ff">Set location</h3>
+            <p style="margin:0 0 12px;font-size:13px;color:rgba(255,255,255,0.75)">Enter a city, county, ZIP, or "City, Country".</p>
+
+            <label style="display:block;margin-bottom:8px;font-size:13px;color:rgba(255,255,255,0.85)">Place</label>
+            <div style="display:flex;gap:8px;margin-bottom:12px">
+              <input id="weather-config-input" type="text" placeholder="e.g., San Antonio, TX"
+                style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:#fff">
+              <button id="weather-config-geo" title="Use current location"
+                style="padding:8px;border-radius:8px;border:0;background:rgba(255,255,255,0.04);color:#fff">📍</button>
+            </div>
+
+            <div id="weather-config-msg" style="min-height:18px;font-size:13px;color:rgba(255,255,255,0.8);margin-bottom:12px"></div>
+
+            <div style="display:flex;justify-content:flex-end;gap:8px">
+              <button id="weather-config-clear" style="background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 10px;border-radius:8px;color:#fff">Clear</button>
+              <button id="weather-config-save" style="background:linear-gradient(90deg,#60a5fa,#3b82f6);border:0;padding:8px 12px;border-radius:8px;color:#fff">Save</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cloud container (canvas appended by clouds.js) -->
         <div id="cloud-container" class="absolute top-0 right-0 w-36 h-36 sm:w-40 sm:h-40 z-30 cursor-pointer rounded-tr-3xl overflow-hidden">
           <div id="cloud-tooltip" class="tooltip absolute top-20 right-2 sm:top-24 sm:right-4 bg-black/85 text-white px-3 py-1.5 rounded-md text-xs opacity-0 transition-opacity duration-300 pointer-events-none z-40 shadow-lg">
             Click clouds for a surprise!
             <div class="absolute -top-1 right-3 w-3 h-3 bg-black/85 transform rotate-45"></div>
           </div>
-
-          <!-- Pre-created overlay used by optimized JS (no DOM create/remove during RAF) -->
-          <div id="cloudSurprise" aria-hidden="true" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:60;opacity:0;transition:opacity .45s ease;">
-            <div style="font-size:36px;filter:drop-shadow(0 6px 10px rgba(0,0,0,0.6))">🎉</div>
-          </div>
+          <!-- cloudSurprise overlay will be created by clouds.js if missing -->
         </div>
 
         <div class="relative z-20">
-          <div class="date-time text-sm font-light opacity-70 mb-1 tracking-wide animate-fadeInUp" id="dateTime">Thursday, 09:24</div>
+          <div class="date-time text-sm font-light opacity-70 mb-1 tracking-wide" id="dateTime">Thursday, 09:24</div>
 
           <div class="current-weather flex items-center mb-2">
             <div class="weather-icon-main text-5xl mr-3" id="weatherIcon">⛅</div>
             <div class="temp text-5xl font-semibold">
-              <span class="bg-clip-text text-transparent bg-gradient-to-r from-white/90 to-slate-300/70 animate-fadeInScaleUp delay-100" id="temperature">46°F</span>
+              <span id="temperature" class="bg-clip-text text-transparent bg-gradient-to-r from-white/90 to-slate-300/70">46°F</span>
             </div>
           </div>
 
-          <div class="location text-lg opacity-85 mb-4 tracking-wide animate-fadeInUp delay-200" id="location">New York, USA</div>
+          <div class="location text-lg opacity-85 mb-4 tracking-wide" id="location">New York, USA</div>
 
-          <div class="sun-info bg-black/30 backdrop-blur-sm rounded-2xl p-3 sm:p-4 flex justify-between items-center mb-4 border border-white/4 shadow-md animate-fadeInUp delay-300">
+          <div class="sun-info bg-black/30 backdrop-blur-sm rounded-2xl p-3 sm:p-4 flex justify-between items-center mb-4 border border-white/4 shadow-md">
             <div class="sunrise text-center">
               <div class="sun-icon text-xl mb-1">☀️</div>
               <div class="text-xs opacity-70" id="sunriseTime">6:14 am</div>
@@ -55,12 +78,12 @@
             </div>
           </div>
 
-          <div class="precipitation bg-white/6 backdrop-blur-sm rounded-xl p-3 flex items-center mb-4 border border-white/3 shadow-sm animate-fadeInUp delay-400">
-            <div class="precip-icon text-2xl mr-2 text-sky-300 drop-shadow-lg animate-gentleBob" id="precipIcon">🌧️</div>
+          <div class="precipitation bg-white/6 backdrop-blur-sm rounded-xl p-3 flex items-center mb-4 border border-white/3 shadow-sm">
+            <div class="precip-icon text-2xl mr-2 text-sky-300 drop-shadow-lg" id="precipIcon">🌧️</div>
             <div class="text-sm opacity-85" id="precipitationChance">Precip —</div>
           </div>
 
-          <div class="humidity-wind flex justify-between text-sm opacity-85 mb-5 animate-fadeInUp delay-500">
+          <div class="humidity-wind flex justify-between text-sm opacity-85 mb-5">
             <div id="humidity">Humidity: —</div>
             <div id="windSpeed">Wind: —</div>
           </div>
@@ -73,7 +96,6 @@
     </div>
   </div>
 
-  <!-- Load the widget script (ES module) -->
   <script type="module" src="./script.js"></script>
 </body>
 </html>
