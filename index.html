@@ -5,96 +5,90 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Weather Widget</title>
 
+  <!-- Tailwind (optional, used by the original layout) -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Font -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Local stylesheet (optional) -->
   <link rel="stylesheet" href="./styles.css">
+  <style>
+    /* Minimal fallback styles so this page looks OK even without styles.css */
+    :root { --bg: #0b1220; }
+    body { margin:0; min-height:100vh; background:var(--bg); color:#fff; font-family: Outfit, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+    .body-wrapper { display:flex; align-items:center; justify-content:center; padding:1rem; min-height:100vh; }
+    .weather-widget-container { width:100%; max-width:420px; }
+    .weather-widget { position:relative; background:linear-gradient(180deg,#0b1220,#000); border-radius:20px; padding:1.25rem; overflow:hidden; border:1px solid rgba(255,255,255,0.04); box-shadow: 0 12px 40px rgba(0,0,0,0.6); }
+    #cloud-container { position:absolute; top:0; right:0; width:9rem; height:9rem; border-top-right-radius:20px; overflow:hidden; cursor:pointer; z-index:30; }
+    .tooltip { position:absolute; top:5.25rem; right:0.5rem; background:rgba(0,0,0,0.85); padding:0.35rem 0.6rem; border-radius:8px; font-size:12px; opacity:0; transition:opacity .2s ease; pointer-events:none; z-index:40; }
+    .date-time { font-size:13px; opacity:.75; margin-bottom:.25rem; }
+    .current-weather { display:flex; align-items:center; gap:.75rem; margin-bottom:.5rem; }
+    .weather-icon-main { font-size:2.5rem; }
+    .temp { font-size:2.5rem; font-weight:600; }
+    .location { font-size:1.05rem; opacity:.92; margin-bottom:1rem; }
+    .sun-info { display:flex; justify-content:space-between; align-items:center; gap:1rem; background:rgba(255,255,255,0.03); padding:.6rem; border-radius:12px; margin-bottom:1rem; }
+    .precipitation { display:flex; align-items:center; gap:.6rem; background:rgba(255,255,255,0.03); padding:.6rem; border-radius:12px; margin-bottom:1rem; }
+    .humidity-wind { display:flex; justify-content:space-between; font-size:.95rem; opacity:.9; margin-bottom:1rem; }
+    .forecast { display:flex; gap:.5rem; }
+    /* forecast card */
+    .forecast-day { background:rgba(255,255,255,0.03); border-radius:10px; padding:.5rem; width:4.5rem; text-align:center; border:1px solid rgba(255,255,255,0.04); }
+  </style>
 </head>
-<body class="bg-gray-900 text-white" style="font-family:Outfit,system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial;">
-  <div class="body-wrapper min-h-screen flex justify-center items-center p-6">
+<body>
+  <div class="body-wrapper">
     <div class="weather-widget-container relative w-full max-w-sm sm:max-w-md">
-      <div class="weather-widget relative text-white bg-gradient-to-br from-gray-900/90 via-neutral-900/90 to-black/100 backdrop-blur-lg shadow-2xl rounded-3xl p-6 overflow-hidden border border-white/6">
+      <div class="weather-widget relative text-white">
 
-        <!-- Gear button -->
-        <button id="weather-config-btn" aria-label="Configure location" title="Set location"
-          style="position:absolute;top:12px;left:12px;z-index:130;background:rgba(255,255,255,0.04);border:0;padding:6px 8px;border-radius:8px;color:#fff;backdrop-filter:blur(6px);cursor:pointer;">
-          ⚙
-        </button>
-
-        <!-- Slide-out panel (replace previous modal) -->
-        <div id="weather-config-panel" aria-hidden="true" class="config-panel">
-          <div class="config-panel-inner">
-            <header class="config-panel-header">
-              <div style="font-weight:600">Set location</div>
-              <button id="weather-config-close" aria-label="Close" class="config-close">✕</button>
-            </header>
-
-            <div class="config-panel-body">
-              <p class="muted">Enter a city, county, ZIP, or "City, Country".</p>
-
-              <label class="label">Place</label>
-              <div class="config-row">
-                <input id="weather-config-input" type="text" placeholder="e.g., San Antonio, TX" class="config-input" />
-                <button id="weather-config-geo" class="icon-btn" title="Use current location">📍</button>
-              </div>
-
-              <div id="weather-config-msg" class="config-msg"></div>
-
-              <div class="config-actions">
-                <button id="weather-config-clear" class="btn-ghost">Clear</button>
-                <button id="weather-config-save" class="btn-primary">Save</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Cloud container -->
         <div id="cloud-container" class="absolute top-0 right-0 w-36 h-36 sm:w-40 sm:h-40 z-30 cursor-pointer rounded-tr-3xl overflow-hidden">
-          <div id="cloud-tooltip" class="tooltip absolute top-20 right-2 sm:top-24 sm:right-4 bg-black/85 text-white px-3 py-1.5 rounded-md text-xs opacity-0 transition-opacity duration-300 pointer-events-none z-40 shadow-lg">
-            Click clouds for a surprise!
-            <div class="absolute -top-1 right-3 w-3 h-3 bg-black/85 transform rotate-45"></div>
+          <div id="cloud-tooltip" class="tooltip">Click clouds for a surprise!
+            <div style="position:absolute;top:-6px;right:10px;width:10px;height:10px;background:rgba(0,0,0,0.85);transform:rotate(45deg)"></div>
           </div>
         </div>
 
         <div class="relative z-20">
           <div class="date-time text-sm font-light opacity-70 mb-1 tracking-wide" id="dateTime">Thursday, 09:24</div>
 
-          <div class="current-weather flex items-center mb-2">
-            <div class="weather-icon-main text-5xl mr-3" id="weatherIcon">⛅</div>
-            <div class="temp text-5xl font-semibold">
-              <span id="temperature" class="bg-clip-text text-transparent bg-gradient-to-r from-white/90 to-slate-300/70">46°F</span>
+          <div class="current-weather">
+            <div class="weather-icon-main" id="weatherIcon">⛅</div>
+            <div class="temp">
+              <span id="temperature">46°F</span>
             </div>
           </div>
 
-          <div class="location text-lg opacity-85 mb-4 tracking-wide" id="location">New York, USA</div>
+          <div class="location mb-4" id="location">New York, USA</div>
 
-          <div class="sun-info bg-black/30 backdrop-blur-sm rounded-2xl p-3 sm:p-4 flex justify-between items-center mb-4 border border-white/4 shadow-md">
+          <div class="sun-info">
             <div class="sunrise text-center">
-              <div class="sun-icon text-xl mb-1">☀️</div>
+              <div class="sun-icon">☀️</div>
               <div class="text-xs opacity-70" id="sunriseTime">6:14 am</div>
             </div>
             <div class="day-length text-center text-sm opacity-80" id="dayLength">11 h 42 m</div>
             <div class="sunset text-center">
-              <div class="sun-icon text-xl mb-1">🌙</div>
+              <div class="sun-icon">🌙</div>
               <div class="text-xs opacity-70" id="sunsetTime">5:56 pm</div>
             </div>
           </div>
 
-          <div class="precipitation bg-white/6 backdrop-blur-sm rounded-xl p-3 flex items-center mb-4 border border-white/3 shadow-sm">
-            <div class="precip-icon text-2xl mr-2 text-sky-300 drop-shadow-lg" id="precipIcon">🌧️</div>
+          <div class="precipitation">
+            <div class="precip-icon text-2xl mr-2 text-sky-300" id="precipIcon">🌧️</div>
             <div class="text-sm opacity-85" id="precipitationChance">Precip —</div>
           </div>
 
-          <div class="humidity-wind flex justify-between text-sm opacity-85 mb-5">
+          <div class="humidity-wind">
             <div id="humidity">Humidity: —</div>
             <div id="windSpeed">Wind: —</div>
           </div>
 
-          <div class="forecast flex flex-nowrap justify-between pb-2" id="forecastContainer"></div>
+          <div class="forecast" id="forecastContainer">
+            <!-- JS will populate forecast cards -->
+          </div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Include your module script that bootstraps the widget (script.js) -->
   <script type="module" src="./script.js"></script>
 </body>
 </html>
