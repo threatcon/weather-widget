@@ -3,10 +3,9 @@
 // debounced resize, reduced geometry detail, shared geometries/materials, reduced raindrops,
 // pre-created overlay surprise toggle (no DOM create/remove in RAF), limited raycast targets,
 // safe weather fetch with retries and hourly refresh.
-// Only change from your repo: enhanced timezone-aware 4-day forecast selection (inside renderUI).
+// CHANGE: forecast cards layout updated so 4-day panels are evenly distributed across container.
 import * as THREE from "https://esm.sh/three@0.158.0";
 import { OrbitControls } from "https://esm.sh/three@0.158.0/examples/jsm/controls/OrbitControls.js";
-
 /* ---------- small helpers ---------- */
 const SELECTORS = {
   dateTime: 'dateTime',
@@ -25,7 +24,6 @@ const SELECTORS = {
 };
 const EL = Object.fromEntries(Object.entries(SELECTORS).map(([k, v]) => [k, document.getElementById(v)]));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-
 async function fetchWithRetries(url, opts = {}, tries = 3, backoff = 400) {
   for (let i = 0; i < tries; i++) {
     try {
@@ -39,7 +37,6 @@ async function fetchWithRetries(url, opts = {}, tries = 3, backoff = 400) {
     }
   }
 }
-
 /* ---------- small utilities ---------- */
 function setText(el, text) { if (el) el.textContent = text; }
 function weatherCodeToIcon(code, isDay) {
@@ -59,7 +56,6 @@ function formatTimeISOToLocal(isoStr) {
   catch { return isoStr; }
 }
 function formatDurationSeconds(sec) { const h = Math.floor(sec/3600); const m = Math.floor((sec%3600)/60); return `${h} h ${m} m`; }
-
 /* ---------- date/time ---------- */
 function updateDateTime() {
   const now = new Date();
@@ -69,7 +65,6 @@ function updateDateTime() {
 }
 updateDateTime();
 setInterval(updateDateTime, 60_000);
-
 /* ---------- 3D cloud scene (optimized) ---------- */
 (function initCloudScene() {
   const container = EL.cloudContainer;
@@ -296,7 +291,6 @@ setInterval(updateDateTime, 60_000);
     if (surprise && surprise.parentNode === container) container.removeChild(surprise);
   };
 })();
-
 /* ---------- Weather via IP -> Open-Meteo (imperial) with robust handling ---------- */
 (function weatherLogic() {
   const OPEN_METEO = 'https://api.open-meteo.com/v1/forecast';
@@ -384,117 +378,34 @@ setInterval(updateDateTime, 60_000);
         setText(EL.dayLength, formatDurationSeconds(Math.max(0, Math.round((new Date(sunset) - new Date(sunrise))/1000))));
       }
 
-      // ---------------- timezone-aware forecast building (ENHANCED) ----------------
+      // forecast: first 4 days
       const fc = EL.forecastContainer;
       if (!fc) return;
-
-      // compute "today" in API timezone (preferred) or via utc_offset_seconds fallback
-      // helper: YYYY-MM-DD in IANA timezone
-      function yyyyMmDdInZone(date, timeZone) {
-        try {
-          const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
-          const y = parts.find(p => p.type === 'year').value;
-          const m = parts.find(p => p.type === 'month').value;
-          const d = parts.find(p => p.type === 'day').value;
-          return `${y}-${m}-${d}`;
-        } catch (e) { return null; }
-      }
-      // helper: YYYY-MM-DD by applying utc offset seconds
-      function yyyyMmDdWithOffset(date, utc_offset_seconds) {
-        try {
-          const shifted = new Date(date.getTime() + (utc_offset_seconds || 0) * 1000);
-          const y = shifted.getUTCFullYear();
-          const m = String(shifted.getUTCMonth() + 1).padStart(2, '0');
-          const d = String(shifted.getUTCDate()).padStart(2, '0');
-          return `${y}-${m}-${d}`;
-        } catch (e) { return null; }
-      }
-
-      console.log('DEBUG daily.time:', data.daily?.time?.slice(0,8), 'api timezone:', data.timezone, 'utc_offset_seconds:', data.utc_offset_seconds);
-
-      const now = new Date();
-      const apiTz = data.timezone || null;
-      const utcOffset = (typeof data.utc_offset_seconds === 'number') ? data.utc_offset_seconds
-                      : (typeof data.utc_offset_seconds === 'string' && data.utc_offset_seconds ? Number(data.utc_offset_seconds) : null);
-
-      let todayStr = null;
-      if (apiTz) todayStr = yyyyMmDdInZone(now, apiTz);
-      if (!todayStr && utcOffset != null) todayStr = yyyyMmDdWithOffset(now, utcOffset);
-      if (!todayStr) {
-        const y = now.getFullYear(), m = String(now.getMonth() + 1).padStart(2, '0'), d = String(now.getDate()).padStart(2, '0');
-        todayStr = `${y}-${m}-${d}`;
-      }
-
-      const times = data.daily?.time || [];
-      let startIdx = times.findIndex(t => t === todayStr);
-
-      // common heuristic: if API returned yesterday first and today second, shift to index 1
-      if (startIdx === -1 && times.length >= 2) {
-        const yesterday = new Date(now);
-        yesterday.setDate(now.getDate() - 1);
-        let yStr = null;
-        if (apiTz) yStr = yyyyMmDdInZone(yesterday, apiTz);
-        else if (utcOffset != null) yStr = yyyyMmDdWithOffset(yesterday, utcOffset);
-        else { const yy = yesterday.getFullYear(), mm = String(yesterday.getMonth()+1).padStart(2,'0'), dd = String(yesterday.getDate()).padStart(2,'0'); yStr = `${yy}-${mm}-${dd}`; }
-        if (times[0] === yStr && times[1] === todayStr) startIdx = 1;
-      }
-
-      // final attempt: compare each candidate converted to API tz
-      if (startIdx === -1) {
-        for (let i = 0; i < times.length; i++) {
-          const candidateIso = `${times[i]}T00:00:00`;
-          try {
-            let candidateStr = null;
-            if (apiTz) candidateStr = yyyyMmDdInZone(new Date(candidateIso), apiTz);
-            else if (utcOffset != null) candidateStr = yyyyMmDdWithOffset(new Date(candidateIso), utcOffset);
-            else {
-              const dt = new Date(candidateIso);
-              const yy = dt.getFullYear(), mm = String(dt.getMonth()+1).padStart(2,'0'), dd = String(dt.getDate()).padStart(2,'0');
-              candidateStr = `${yy}-${mm}-${dd}`;
-            }
-            if (candidateStr === todayStr) { startIdx = i; break; }
-          } catch (e) { /* ignore */ }
-        }
-      }
-
-      if (startIdx === -1) startIdx = 0;
-      console.log('DEBUG computed todayStr:', todayStr, '=> startIdx:', startIdx);
-
-      const needRebuild = !fc._built || fc._startIdx !== startIdx || fc._len !== times.length;
-      if (!needRebuild) return;
-
-      fc._built = true;
-      fc._startIdx = startIdx;
-      fc._len = times.length;
-
-      // clear previous
       while (fc.firstChild) fc.removeChild(fc.firstChild);
-
-      // build 4 forecast cards starting at startIdx
-      const maxCards = 4;
-      for (let i = 0; i < maxCards; i++) {
-        const idx = startIdx + i;
-        if (!times[idx]) break;
-        const dIso = times[idx]; // 'YYYY-MM-DD'
-        const dObj = new Date(`${dIso}T00:00:00`);
-        const label = (i === 0) ? 'Today' : (apiTz ? new Intl.DateTimeFormat(undefined, { weekday: 'short', timeZone: apiTz }).format(dObj) : dObj.toLocaleDateString(undefined, { weekday: 'short' }));
-        const hi = data.daily?.temperature_2m_max?.[idx] != null ? Math.round(data.daily.temperature_2m_max[idx]) : '—';
-        const lo = data.daily?.temperature_2m_min?.[idx] != null ? Math.round(data.daily.temperature_2m_min[idx]) : '—';
-        const codeDay = data.daily?.weathercode?.[idx] != null ? data.daily.weathercode[idx] : null;
-
-        const card = document.createElement('div');
-        card.className = 'forecast-day bg-white/5 backdrop-blur-sm rounded-xl p-3 w-20 text-center border border-white/10 shadow-sm hover:bg-white/10 transition-all duration-200 cursor-pointer transform hover:-translate-y-1 animate-fadeInUp';
-        card.innerHTML = `<div class="day-name text-xs font-medium mb-1 opacity-80">${label}</div>
-                          <div class="forecast-icon text-2xl my-1 drop-shadow-md">${weatherCodeToIcon(codeDay,true)}</div>
-                          <div class="high-temp text-sm font-semibold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300">${hi}°</div>
-                          <div class="low-temp text-xs opacity-70">${lo}°</div>`;
-        card.addEventListener('click', () => {
-          setText(EL.temperature, `${hi}°F`);
-          setText(EL.weatherIcon, weatherCodeToIcon(codeDay, true));
-          card.classList.add('scale-105');
-          setTimeout(() => card.classList.remove('scale-105'), 220);
-        });
-        fc.appendChild(card);
+      if (data.daily?.time) {
+        const days = data.daily.time;
+        const max = Math.min(days.length, 4);
+        for (let i = 0; i < max; i++) {
+          const dIso = data.daily.time[i];
+          const d = new Date(dIso);
+          const label = i === 0 ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short' });
+          const hi = Math.round(data.daily.temperature_2m_max[i]);
+          const lo = Math.round(data.daily.temperature_2m_min[i]);
+          const codeDay = data.daily.weathercode[i];
+          const card = document.createElement('div');
+          card.className = 'forecast-day bg-white/5 backdrop-blur-sm rounded-xl p-3 w-20 text-center border border-white/10 shadow-sm hover:bg-white/10 transition-all duration-200 cursor-pointer transform hover:-translate-y-1 animate-fadeInUp';
+          card.innerHTML = `<div class="day-name text-xs font-medium mb-1 opacity-80">${label}</div>
+                            <div class="forecast-icon text-2xl my-1 drop-shadow-md">${weatherCodeToIcon(codeDay,true)}</div>
+                            <div class="high-temp text-sm font-semibold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-300">${hi}°</div>
+                            <div class="low-temp text-xs opacity-70">${lo}°</div>`;
+          card.addEventListener('click', () => {
+            setText(EL.temperature, `${hi}°F`);
+            setText(EL.weatherIcon, weatherCodeToIcon(codeDay, true));
+            card.classList.add('scale-105');
+            setTimeout(() => card.classList.remove('scale-105'), 220);
+          });
+          fc.appendChild(card);
+        }
       }
     } catch (err) {
       console.error('renderUI error', err);
