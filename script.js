@@ -236,10 +236,10 @@ setInterval(updateDateTime, 60_000);
     const dt = Math.min(60, t - lastTime) / 1000;
     lastTime = t;
 
-    cloudGroup.rotation.y += 0.002;
+    //cloudGroup.rotation.y += 0.002;
     [cloud1, cloud2].forEach((cloud) => {
       if (!cloud) return;
-      cloud.position.y = cloud.userData.originalPosition.y + Math.sin(t * cloud.userData.bobSpeed + cloud.userData.bobOffset) * cloud.userData.bobAmount;
+      //cloud.position.y = cloud.userData.originalPosition.y + Math.sin(t * cloud.userData.bobSpeed + cloud.userData.bobOffset) * cloud.userData.bobAmount;
       if (cloud.userData.isRaining) {
         const cur = (cloud === cloud1) ? raindrops1 : raindrops2;
         cur.forEach(r => {
@@ -257,15 +257,15 @@ setInterval(updateDateTime, 60_000);
     renderer.render(scene, camera);
     reqId = requestAnimationFrame(animateFrame);
   }
-  function startLoop() { if (reqId) return; running = true; lastTime = performance.now(); reqId = requestAnimationFrame(animateFrame); }
-  function stopLoop() { running = false; if (reqId) { cancelAnimationFrame(reqId); reqId = null; } }
+  //function startLoop() { if (reqId) return; running = true; lastTime = performance.now(); reqId = requestAnimationFrame(animateFrame); }
+  //function stopLoop() { running = false; if (reqId) { cancelAnimationFrame(reqId); reqId = null; } }
 
-  const io = new IntersectionObserver((entries) => {
-    const e = entries[0];
-    if (!e || !e.isIntersecting) stopLoop();
-    else startLoop();
-  }, { threshold: 0.05 });
-  io.observe(container);
+ // const io = new IntersectionObserver((entries) => {
+ //   const e = entries[0];
+ //   if (!e || !e.isIntersecting) stopLoop();
+ //   else startLoop();
+ // }, { threshold: 0.05 });
+//  io.observe(container);
 
   // Debounced resize handler
   let resizeTimer = null;
@@ -286,16 +286,16 @@ setInterval(updateDateTime, 60_000);
   window.addEventListener('resize', onResizeDebounced);
 
   // Start RAF (observer manages pause/resume)
-  startLoop();
+  //startLoop();
 
   // Teardown helper
-  container.__teardownClouds = () => {
-    io.disconnect(); stopLoop(); renderer.domElement.removeEventListener('click', onCanvasClick);
-    window.removeEventListener('resize', onResizeDebounced);
-    if (renderer.domElement.parentNode === container) container.removeChild(renderer.domElement);
-    if (surprise && surprise.parentNode === container) container.removeChild(surprise);
-  };
-})();
+ // container.__teardownClouds = () => {
+ //   io.disconnect(); stopLoop(); renderer.domElement.removeEventListener('click', onCanvasClick);
+ //   window.removeEventListener('resize', onResizeDebounced);
+ //   if (renderer.domElement.parentNode === container) container.removeChild(renderer.domElement);
+//    if (surprise && surprise.parentNode === container) container.removeChild(surprise);
+//  };
+//})();
 
 /* ---------- Weather via IP -> Open-Meteo (imperial) with robust handling ---------- */
 (function weatherLogic() {
