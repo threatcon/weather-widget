@@ -95,11 +95,4 @@ body, .body-wrapper {
     width: 100%;
     padding: 10px;
   }
-  /* remove cloud animation quickly */
-.cloud {
-  display: none !important;
-  animation: none !important;
-  opacity: 0 !important;
-  visibility: hidden !important;
-}
 }
