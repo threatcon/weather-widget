@@ -7,6 +7,8 @@
 import * as THREE from "https://esm.sh/three@0.158.0";
 import { OrbitControls } from "https://esm.sh/three@0.158.0/examples/jsm/controls/OrbitControls.js";
 
+const ENABLE_CLOUDS = false;
+
 /* ---------- small helpers ---------- */
 const SELECTORS = {
   dateTime: 'dateTime',
@@ -72,6 +74,7 @@ setInterval(updateDateTime, 60_000);
 
 /* ---------- 3D cloud scene (optimized) ---------- */
 (function initCloudScene() {
+  if (!ENABLE_CLOUDS) return;
   const container = EL.cloudContainer;
   if (!container) { console.error("cloud-container not found"); return; }
 
