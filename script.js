@@ -239,7 +239,7 @@ setInterval(updateDateTime, 60_000);
     //cloudGroup.rotation.y += 0.002;
     [cloud1, cloud2].forEach((cloud) => {
       if (!cloud) return;
-      //cloud.position.y = cloud.userData.originalPosition.y + Math.sin(t * cloud.userData.bobSpeed + cloud.userData.bobOffset) * cloud.userData.bobAmount;
+      cloud.position.y = cloud.userData.originalPosition.y + Math.sin(t * cloud.userData.bobSpeed + cloud.userData.bobOffset) * cloud.userData.bobAmount;
       if (cloud.userData.isRaining) {
         const cur = (cloud === cloud1) ? raindrops1 : raindrops2;
         cur.forEach(r => {
