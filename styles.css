@@ -31,9 +31,8 @@ body, .body-wrapper {
 .weather-widget { background: linear-gradient(160deg, var(--panel-grad-1), var(--panel-grad-2)); color: #eaeef7; }
 
 /* Icon and small animations */
-/* .weather-icon-main { filter: drop-shadow(0 0 14px rgba(180,200,255,0.18)); animation: floating 3.3s ease-in-out infinite; } */
-.weather-icon-main { filter: drop-shadow(0 0 14px rgba(180,200,255,0.18)); animation: none !important; transform: none !important;}
-@keyframes floating { 0% { transform: translateY(0px); } 50% { transform: translateY(-6px); } 100% { transform: translateY(0px); } }
+/* .weather-icon-main { filter: drop-shadow(0 0 14px rgba(180,200,255,0.18)); animation: floating 3.3s ease-in-out infinite; } 
+@keyframes floating { 0% { transform: translateY(0px); } 50% { transform: translateY(-6px); } 100% { transform: translateY(0px); } } */
 #cloud-container { pointer-events: auto; }
 #cloud-container canvas { display:block; width:100%; height:100%; }
 
